@@ -1,0 +1,1332 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="My Diary">
+<meta name="theme-color" content="#221A10">
+<meta name="robots" content="noindex, nofollow, noarchive">
+<title>My Diary</title>
+<style>
+:root{
+  --desk:#221A10;
+  --paper:#FAF5EA; --paper2:#F1E9D6; --paper3:#E6DAC0;
+  --ink:#211307; --ink2:#54402C; --ink3:#8A7258; --rule:#D9CCAF;
+  --acc:#8C4B21; --gold:#A97E3F; --ok:#2F6650; --bad:#8A2A2A;
+  --serif: 'Iowan Old Style', 'Palatino', Georgia, 'Times New Roman', serif;
+  --sans: -apple-system, BlinkMacSystemFont, 'Helvetica Neue', sans-serif;
+  --appH: 100vh;
+  --safeT: env(safe-area-inset-top, 0px);
+  --safeB: env(safe-area-inset-bottom, 0px);
+}
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent;}
+
+/* ── Shell height: JS sets --appH from visualViewport so the keyboard
+      shrinks the app instead of hiding the field behind it. ── */
+html{height:100%;}
+body{
+  height:var(--appH); overflow:hidden; overscroll-behavior:none;
+  background:var(--desk); touch-action:manipulation;
+  font-family:var(--sans); font-size:17px; color:var(--ink);
+  max-width:460px; margin:0 auto;
+  -webkit-font-smoothing:antialiased; -webkit-text-size-adjust:100%;
+}
+#app{display:flex; flex-direction:column; height:100%; min-height:0; overflow:hidden;}
+
+/* ═══ TOP BAR ═══ */
+.topbar{
+  flex:0 0 auto; background:var(--desk);
+  padding-top:calc(var(--safeT) + 10px);
+  padding-left:14px; padding-right:14px; padding-bottom:8px;
+}
+.tb-row{display:flex; align-items:center; justify-content:space-between; gap:8px;}
+.tb-title{
+  font-family:var(--serif); font-size:15px; letter-spacing:2px;
+  text-transform:uppercase; color:#C9B488; font-weight:600; white-space:nowrap;
+}
+.tb-btns{display:flex; gap:6px;}
+.tb-btn{
+  background:rgba(255,255,255,.08); border:1px solid rgba(201,180,136,.3);
+  border-radius:7px; color:#C9B488; font-size:12px; padding:7px 12px;
+  cursor:pointer; font-family:var(--sans); letter-spacing:.4px; white-space:nowrap;
+}
+.tb-btn:active{background:rgba(255,255,255,.18);}
+.tb-btn[disabled]{opacity:.3;}
+
+/* date stepper — replaces the old fixed side arrows that covered the text */
+.datenav{
+  display:flex; align-items:center; gap:6px; margin-top:9px;
+  background:rgba(0,0,0,.22); border-radius:10px; padding:3px;
+}
+.dn-arr{
+  flex:0 0 auto; width:40px; height:34px; border-radius:8px;
+  background:rgba(255,255,255,.06); border:none; color:#C9B488;
+  font-size:19px; line-height:1; cursor:pointer;
+}
+.dn-arr:active{background:rgba(255,255,255,.16);}
+.dn-arr[disabled]{opacity:.25;}
+.dn-mid{
+  flex:1; min-width:0; text-align:center; background:none; border:none;
+  color:#E0CFA8; font-family:var(--serif); font-size:14.5px; cursor:pointer;
+  padding:6px 2px; letter-spacing:.3px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;
+}
+.dn-mid b{color:#fff; font-weight:600;}
+
+/* ═══ BOOK ═══ */
+#bookArea{
+  flex:1 1 auto; min-height:0; position:relative;
+  padding:6px 10px 0; overflow:hidden;
+}
+.page{
+  position:absolute; inset:6px 10px 0;
+  background:
+    radial-gradient(ellipse at top left, rgba(255,255,255,.5), transparent 55%),
+    var(--paper);
+  border-radius:3px 12px 0 0;
+  box-shadow:0 -4px 26px rgba(0,0,0,.5), inset 2px 0 6px rgba(0,0,0,.05);
+  display:flex; flex-direction:column; min-height:0; overflow:hidden;
+  transform-origin:left center; will-change:transform, opacity;
+}
+.page::before{
+  content:''; position:absolute; left:0; top:0; bottom:0; width:16px;
+  background:linear-gradient(90deg, rgba(80,50,20,.16), transparent);
+  z-index:5; pointer-events:none;
+}
+/* page-turn: short enough that it never feels like lag */
+.page.out-n{animation:outN .16s ease-in forwards;}
+.page.in-n{animation:inN .2s ease-out forwards;}
+.page.out-p{animation:outP .16s ease-in forwards;}
+.page.in-p{animation:inP .2s ease-out forwards;}
+@keyframes outN{to{transform:rotateY(-16deg) translateX(-14px);opacity:.25;}}
+@keyframes inN{from{transform:rotateY(14deg) translateX(16px);opacity:.25;}to{transform:none;opacity:1;}}
+@keyframes outP{to{transform:rotateY(16deg) translateX(14px);opacity:.25;}}
+@keyframes inP{from{transform:rotateY(-14deg) translateX(-16px);opacity:.25;}to{transform:none;opacity:1;}}
+
+/* ═══ PAGE MASTHEAD ═══ */
+.mast{flex:0 0 auto; padding:18px 20px 0 24px; position:relative;}
+.mast-row{display:flex; align-items:flex-start; justify-content:space-between;}
+.mast-dow{
+  font-family:var(--serif); font-size:10px; letter-spacing:4px;
+  text-transform:uppercase; color:var(--gold); font-weight:600; margin-bottom:5px;
+}
+.mast-date{
+  font-family:var(--serif); font-size:32px; font-weight:600;
+  color:var(--ink); line-height:.95; letter-spacing:-.5px;
+}
+.mast-month{
+  font-family:var(--serif); font-size:14.5px; font-style:italic;
+  color:var(--ink2); margin-top:4px;
+}
+.mast-right{text-align:right; padding-top:2px;}
+.mast-year{
+  font-family:var(--serif); font-size:21px; font-weight:600;
+  color:var(--acc); letter-spacing:1px; line-height:1;
+}
+.mast-week{
+  font-family:var(--serif); font-size:11px; font-style:italic;
+  color:var(--ink3); margin-top:5px; letter-spacing:.5px;
+}
+.mast-week b{color:var(--gold); font-style:normal; font-weight:600;}
+.mast-flourish{
+  margin:12px 0 0; height:14px;
+  display:flex; align-items:center; gap:10px;
+}
+.mast-flourish::before,.mast-flourish::after{
+  content:''; flex:1; height:1px;
+  background:linear-gradient(90deg, transparent, var(--gold) 30%, var(--gold) 70%, transparent);
+  opacity:.55;
+}
+.mast-fleuron{font-size:11px; color:var(--gold); opacity:.85;}
+
+/* ═══ PAGE BODY (the scroller — min-height:0 is what makes it scroll) ═══ */
+.pg-body{
+  flex:1 1 auto; min-height:0;
+  overflow-y:auto; -webkit-overflow-scrolling:touch; overscroll-behavior:contain;
+  padding:14px 18px 40px 24px; position:relative;
+}
+
+/* ═══ SECTION ═══ */
+.sec{margin-bottom:24px;}
+.sec-hd{display:flex; align-items:baseline; gap:10px; margin-bottom:3px;}
+.sec-no{
+  font-family:var(--serif); font-size:11px; color:var(--gold);
+  font-style:italic; min-width:16px;
+}
+.sec-name{
+  font-family:var(--serif); font-size:16.5px; font-weight:700;
+  color:var(--ink); letter-spacing:.3px; flex:1;
+}
+.sec-icon{font-size:14px; opacity:.9;}
+.sec-count{font-family:var(--sans); font-size:10px; color:var(--ink3); letter-spacing:.5px;}
+.sec-underline{
+  height:2px; margin:5px 0 10px;
+  background:linear-gradient(90deg, var(--acc) 0 34px, var(--rule) 34px);
+  opacity:.85;
+}
+
+/* ═══ BULLETS ═══ */
+.bullet{display:flex; align-items:flex-start; gap:10px; padding:5px 0;}
+.bullet-mark{
+  flex:0 0 auto; margin-top:9px;
+  width:5px; height:5px; transform:rotate(45deg);
+  background:var(--gold);
+}
+.bullet-inp{
+  flex:1 1 auto; min-width:0; background:transparent; border:none; outline:none;
+  font-family:var(--sans); font-size:16px; color:var(--ink);
+  line-height:1.55; resize:none; -webkit-appearance:none; appearance:none;
+  border-bottom:1px solid transparent; padding-bottom:3px;
+  overflow:hidden; border-radius:0;
+}
+.bullet-inp:focus{border-bottom-color:var(--rule);}
+.bullet-inp::placeholder{color:var(--ink3); font-style:italic; opacity:.7;}
+.bullet-x{
+  flex:0 0 auto; background:none; border:none; color:var(--ink3); opacity:.45;
+  font-size:15px; cursor:pointer; padding:4px 2px; margin-top:2px;
+}
+.add-bullet{
+  display:flex; align-items:center; gap:9px;
+  background:none; border:none; cursor:pointer;
+  padding:7px 0 2px; color:var(--acc);
+  font-family:var(--sans); font-size:13.5px; font-weight:600; letter-spacing:.3px;
+}
+.add-bullet .plus{
+  flex:0 0 auto; width:20px; height:20px; border-radius:50%;
+  border:1.5px solid var(--acc); color:var(--acc);
+  display:flex; align-items:center; justify-content:center;
+  font-size:13px; line-height:1;
+}
+
+/* ═══ PICS (end of section) ═══ */
+.pics-row{
+  display:flex; gap:8px; overflow-x:auto; -webkit-overflow-scrolling:touch;
+  padding:10px 0 2px; align-items:center;
+}
+.pic{
+  position:relative; flex:0 0 auto;
+  width:82px; height:82px; border-radius:3px; overflow:hidden;
+  border:3px solid #fff;
+  box-shadow:0 2px 7px rgba(60,40,15,.28);
+  transform:rotate(-1.2deg);
+}
+.pic:nth-child(even){transform:rotate(1.4deg);}
+.pic img{width:100%; height:100%; object-fit:cover; display:block;}
+.pic-x{
+  position:absolute; top:2px; right:2px;
+  width:20px; height:20px; border-radius:50%;
+  background:rgba(33,19,7,.68); color:#fff; border:none;
+  font-size:10px; cursor:pointer;
+  display:flex; align-items:center; justify-content:center;
+}
+.add-pic{
+  flex:0 0 auto; width:82px; height:82px; border-radius:3px;
+  border:1.5px dashed var(--gold); background:rgba(169,126,63,.06);
+  display:flex; flex-direction:column; align-items:center; justify-content:center;
+  cursor:pointer; gap:3px;
+}
+.add-pic .ap-plus{
+  width:24px; height:24px; border-radius:50%;
+  border:1.5px solid var(--gold); color:var(--gold);
+  display:flex; align-items:center; justify-content:center; font-size:15px;
+}
+.add-pic .ap-lbl{font-size:9px; color:var(--gold); letter-spacing:1px; text-transform:uppercase; font-weight:600;}
+
+/* ═══ BOTTOM BAR ═══ */
+#bottomBar{
+  flex:0 0 auto; background:var(--desk);
+  border-top:1px solid rgba(201,180,136,.15);
+  display:flex; justify-content:space-around; align-items:center;
+  padding-top:7px; padding-bottom:calc(var(--safeB) + 7px);
+}
+.bb-btn{display:flex; flex-direction:column; align-items:center; gap:2px; background:none; border:none; cursor:pointer; opacity:.4; padding:2px 18px;}
+.bb-btn.on{opacity:1;}
+.bb-ico{font-size:19px;}
+.bb-lbl{font-size:9px; color:#C9B488; letter-spacing:1px; text-transform:uppercase; font-family:var(--sans);}
+
+/* ═══ OVERLAYS ═══ */
+.ov{position:fixed; inset:0; background:rgba(20,13,5,.78); z-index:300; display:none; align-items:flex-end; justify-content:center;}
+.ov.show{display:flex;}
+.sheet{
+  background:var(--paper); border-radius:18px 18px 0 0;
+  width:100%; max-width:460px; max-height:calc(var(--appH) - 40px);
+  overflow-y:auto; -webkit-overflow-scrolling:touch; overscroll-behavior:contain;
+  padding:0 20px; padding-bottom:calc(var(--safeB) + 22px);
+  animation:up .24s ease;
+}
+@keyframes up{from{transform:translateY(100%);}to{transform:translateY(0);}}
+.sheet-handle{width:34px; height:4px; border-radius:2px; background:var(--rule); margin:12px auto 15px;}
+.sheet-title{font-family:var(--serif); font-size:20px; font-weight:700; color:var(--ink); margin-bottom:4px; display:flex; align-items:center; gap:8px;}
+.sheet-sub{font-family:var(--serif); font-size:12px; font-style:italic; color:var(--ink3); margin-bottom:16px;}
+.f-btn{display:block; width:100%; margin-top:10px; padding:13px; border-radius:9px; font-family:var(--sans); font-size:16px; font-weight:600; cursor:pointer; border:none; -webkit-appearance:none; letter-spacing:.3px;}
+.f-btn-p{background:var(--acc); color:#fff;}
+.f-btn-g{background:transparent; border:1px solid var(--rule); color:var(--ink2);}
+.f-btn-d{background:transparent; border:1px solid var(--bad); color:var(--bad);}
+.f-inp{display:block; width:100%; margin-bottom:10px; background:var(--paper2); border:1px solid var(--rule); border-radius:9px; padding:12px 14px; color:var(--ink); font-family:var(--sans); font-size:16px; outline:none; -webkit-appearance:none;}
+
+/* ═══ ARCHIVE ═══ */
+.arc-yr{font-family:var(--serif); font-size:23px; font-weight:700; color:var(--ink); padding:10px 0 6px; border-bottom:2px solid var(--gold); margin-bottom:12px;}
+.arc-mo{font-family:var(--serif); font-size:15px; font-style:italic; font-weight:600; color:var(--acc); padding:8px 0 5px; border-bottom:1px solid var(--rule); margin-bottom:6px; display:flex; justify-content:space-between;}
+.arc-mo-cnt{font-family:var(--sans); font-size:10px; color:var(--ink3); font-style:normal; letter-spacing:1px; text-transform:uppercase; align-self:center;}
+.arc-day{display:flex; align-items:center; gap:11px; padding:10px 0; border-bottom:1px solid var(--rule); cursor:pointer;}
+.arc-thumb{width:46px; height:46px; border-radius:3px; overflow:hidden; border:2px solid #fff; box-shadow:0 1px 4px rgba(60,40,15,.25); background:var(--paper2); flex:0 0 auto; display:flex; align-items:center; justify-content:center; font-size:16px; transform:rotate(-1.5deg);}
+.arc-thumb img{width:100%; height:100%; object-fit:cover;}
+.arc-lbl{flex:1; min-width:0;}
+.arc-date{font-family:var(--serif); font-size:16px; font-weight:600; color:var(--ink);}
+.arc-prev{font-size:12px; color:var(--ink3); margin-top:2px; overflow:hidden; white-space:nowrap; text-overflow:ellipsis;}
+.arc-week{font-family:var(--serif); font-size:10px; font-style:italic; color:var(--gold);}
+.arc-pics{font-size:11px; color:var(--acc); flex:0 0 auto;}
+
+/* settings */
+.info-box{background:var(--paper2); border:1px solid var(--rule); border-radius:9px; padding:14px; margin-bottom:12px; font-size:14px; color:var(--ink2); line-height:1.65;}
+.info-box strong{color:var(--acc);}
+.info-box.warn{background:#FBEEE6; border-color:#D9A98C;}
+.set-lbl{font-family:var(--serif);font-size:11px;letter-spacing:2.5px;text-transform:uppercase;color:var(--gold);margin-bottom:8px;font-weight:600;}
+.set-row{display:flex; align-items:center; gap:8px; padding:10px 0; border-bottom:1px solid var(--rule);}
+.set-name{flex:1; min-width:0; font-size:15px; color:var(--ink); overflow:hidden; text-overflow:ellipsis;}
+.i-btn{background:none; border:1px solid var(--rule); border-radius:6px; padding:5px 9px; color:var(--ink2); cursor:pointer; font-size:12px; font-family:var(--sans); flex:0 0 auto;}
+.i-btn.d{color:var(--bad);}
+
+#toast{position:fixed; left:50%; top:calc(var(--safeT) + 14px); transform:translateX(-50%); background:var(--ok); color:#fff; padding:9px 20px; border-radius:20px; font-size:14px; font-weight:500; z-index:999; opacity:0; pointer-events:none; transition:opacity .25s; max-width:90%; text-align:center; font-family:var(--sans);}
+#toast.show{opacity:1;}
+#toast.err{background:var(--bad);}
+
+#lbox{position:fixed; inset:0; background:rgba(0,0,0,.92); z-index:500; display:none; align-items:center; justify-content:center;}
+#lbox.show{display:flex;}
+#lbox img{max-width:94%; max-height:88%; object-fit:contain; border-radius:4px; border:6px solid #fff;}
+
+.tab{display:none; flex:1 1 auto; min-height:0; overflow:hidden; flex-direction:column;}
+.tab.on{display:flex;}
+.tab-scroll{flex:1 1 auto; min-height:0; overflow-y:auto; -webkit-overflow-scrolling:touch; overscroll-behavior:contain; padding:16px 20px 40px; background:var(--paper); border-radius:3px 12px 0 0; margin:6px 10px 0;}
+.empty{text-align:center; padding:50px 18px; color:var(--ink3);}
+.empty-em{font-size:36px; margin-bottom:12px;}
+.empty-t{font-family:var(--serif); font-size:18px; font-style:italic; color:var(--ink2); margin-bottom:6px;}
+::-webkit-scrollbar{width:0; height:0;}
+
+#boot{position:fixed;inset:0;background:var(--desk);z-index:800;display:flex;align-items:center;justify-content:center;flex-direction:column;gap:14px;color:#C9B488;font-family:var(--serif);font-size:15px;font-style:italic;padding:26px;text-align:center;}
+#boot.gone{display:none;}
+/* If scripts are blocked entirely — opened from the Files app preview, or
+   from inside WhatsApp/Gmail's built-in browser — nothing below can ever
+   run to explain that. So this hint is pure CSS: it simply fades in after
+   four seconds and stays. When the app boots normally the whole screen is
+   removed long before anyone reads it. */
+#bootHelp{
+  max-width:330px; font-family:var(--sans); font-style:normal; font-size:13.5px;
+  line-height:1.7; color:#8A7A58; opacity:0;
+  animation:bootHelpIn .6s ease 4s forwards;
+}
+#bootHelp b{color:#C9B488;}
+@keyframes bootHelpIn{to{opacity:1;}}
+</style>
+</head>
+<body>
+<div id="boot">
+  <div style="font-size:34px">📖</div>
+  <div id="bootMsg">Opening your diary…</div>
+  <div id="bootStage" style="font-size:11px;letter-spacing:1px;color:#7A6844;font-style:normal"></div>
+  <div id="bootHelp">
+    Still showing this?<br>
+    Then scripts are not running — which happens when the file is opened from the
+    <b>Files app</b>, or from inside <b>WhatsApp / Gmail / Telegram</b>.<br><br>
+    Open this page in <b>Safari</b> itself, then Share → <b>Add to Home Screen</b>.
+  </div>
+</div>
+
+<!-- ══════════════════════════════════════════════════════════════
+     Runs BEFORE the main script on purpose. A syntax error in a later
+     script block stops that block from executing at all, so nothing
+     inside it can report the failure — the boot screen would just sit
+     there forever. This listener is already registered by then and
+     catches it. Also traps a boot that stalls without throwing.
+     ══════════════════════════════════════════════════════════════ -->
+<script>
+(function(){
+  window.__stage='loading script';
+  window.__booted=false;
+
+  function panel(title,detail){
+    var b=document.getElementById('boot');
+    if(!b||b.classList.contains('gone'))return;
+    window.__reported=true;
+    b.innerHTML=
+      '<div style="padding:26px 24px;color:#E9D9B4;font-family:-apple-system,BlinkMacSystemFont,sans-serif;'+
+      'font-style:normal;text-align:left;line-height:1.65;font-size:14.5px;max-width:420px">'+
+      '<div style="font-size:32px;text-align:center;margin-bottom:14px">⚠️</div>'+
+      '<b style="font-size:16px">'+title+'</b><br><br>'+detail+
+      '<div style="margin-top:18px;padding-top:12px;border-top:1px solid rgba(201,180,136,.25);'+
+      'font-size:11.5px;color:#8A7A58;line-height:1.7">'+
+      'Stage: '+window.__stage+'<br>'+
+      'Address: '+location.protocol+'<br>'+
+      'Standalone: '+(window.navigator.standalone?'yes':'no')+
+      '</div></div>';
+  }
+  window.__panel=panel;
+
+  window.addEventListener('error',function(e){
+    // a failed <script>/<img> load fires this too, with no message
+    if(!e.message)return;
+    panel('The diary could not start.',
+      'A script error stopped it before it could draw anything.<br><br>'+
+      '<code style="color:#D8B98A;font-size:12.5px">'+String(e.message).replace(/</g,'&lt;')+'</code>'+
+      (e.lineno?'<br><span style="color:#8A7A58;font-size:12px">line '+e.lineno+'</span>':''));
+  },true);
+
+  window.addEventListener('unhandledrejection',function(e){
+    var r=e.reason;
+    panel('The diary could not finish loading.',
+      '<code style="color:#D8B98A;font-size:12.5px">'+
+      String((r&&r.message)||r||'unknown').replace(/</g,'&lt;')+'</code>');
+  });
+
+  // stall watchdog — nothing threw, but nothing finished either.
+  // Must not clobber a real error that was already reported.
+  setTimeout(function(){
+    if(window.__booted||window.__reported)return;
+    var onFile=location.protocol==='file:';
+    panel('Still opening…',
+      onFile
+        ? 'This page was opened as a <b>file on the device</b>. iOS gives local files an unreliable, '+
+          'temporary storage box and often refuses to open one at all — which is what stalled here.'+
+          '<br><br>Put the file at a real web address, open <i>that</i> in Safari, then '+
+          'Share → Add to Home Screen.'
+        : 'Storage did not respond in time. Close the app completely and reopen it. '+
+          'If it keeps happening, turn off Private Browsing in Safari.');
+  },9000);
+})();
+</script>
+
+<div id="toast"></div>
+<div id="lbox" onclick="this.classList.remove('show')"><img id="lboxImg" alt=""></div>
+<input type="file" id="filePick" accept="image/*" multiple style="display:none">
+<input type="file" id="jsonPick" accept=".json,application/json" style="display:none">
+
+<!-- backup reminder -->
+<div class="ov" id="ovRem">
+  <div class="sheet">
+    <div class="sheet-handle"></div>
+    <div class="sheet-title">💾 Weekly backup</div>
+    <p style="font-size:15px;color:var(--ink2);line-height:1.7;margin:6px 0 16px">It's been <strong id="remDays" style="color:var(--acc)"></strong> days since your last export. Send it to the laptop's Book Viewer now.</p>
+    <button class="f-btn f-btn-p" id="remExport">Export now</button>
+    <button class="f-btn f-btn-g" id="remSnooze">Tomorrow</button>
+  </div>
+</div>
+
+<div id="app">
+  <!-- ══ DIARY ══ -->
+  <div class="tab on" id="tabDiary">
+    <div class="topbar">
+      <div class="tb-row">
+        <span class="tb-title">My Diary</span>
+        <div class="tb-btns">
+          <button class="tb-btn" id="btnToday">Today</button>
+          <button class="tb-btn" id="btnExport">Export</button>
+        </div>
+      </div>
+      <div class="datenav">
+        <button class="dn-arr" id="dnPrev" aria-label="Previous day">‹</button>
+        <button class="dn-mid" id="dnMid"></button>
+        <button class="dn-arr" id="dnNext" aria-label="Next day">›</button>
+      </div>
+    </div>
+    <div id="bookArea">
+      <div class="page" id="pageEl">
+        <div class="mast">
+          <div class="mast-row">
+            <div class="mast-left">
+              <div class="mast-dow" id="mDow"></div>
+              <div class="mast-date" id="mDate"></div>
+              <div class="mast-month" id="mMonth"></div>
+            </div>
+            <div class="mast-right">
+              <div class="mast-year" id="mYear"></div>
+              <div class="mast-week" id="mWeek"></div>
+            </div>
+          </div>
+          <div class="mast-flourish"><span class="mast-fleuron">❦</span></div>
+        </div>
+        <div class="pg-body" id="pgBody"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ══ ARCHIVE ══ -->
+  <div class="tab" id="tabArchive">
+    <div class="topbar"><div class="tb-row"><span class="tb-title">Archive</span></div></div>
+    <div class="tab-scroll" id="arcScroll"></div>
+  </div>
+
+  <!-- ══ MANAGE ══ -->
+  <div class="tab" id="tabSettings">
+    <div class="topbar"><div class="tb-row"><span class="tb-title">Manage</span></div></div>
+    <div class="tab-scroll" id="setScroll"></div>
+  </div>
+
+  <div id="bottomBar">
+    <button class="bb-btn on" id="bbDiary"><span class="bb-ico">📖</span><span class="bb-lbl">Diary</span></button>
+    <button class="bb-btn" id="bbArchive"><span class="bb-ico">🗂</span><span class="bb-lbl">Archive</span></button>
+    <button class="bb-btn" id="bbSettings"><span class="bb-ico">⚙️</span><span class="bb-lbl">Manage</span></button>
+  </div>
+</div>
+
+<script>
+'use strict';
+
+const MON=['January','February','March','April','May','June','July','August','September','October','November','December'];
+const ROMAN=['i','ii','iii','iv','v','vi','vii','viii','ix','x','xi','xii','xiii','xiv','xv'];
+
+const DEF_SECTIONS=[
+  {id:'exercise', icon:'🏃', name:'Daily Exercise'},
+  {id:'news',     icon:'🌍', name:'Important Global News'},
+  {id:'business', icon:'💼', name:'Business Affairs'},
+  {id:'personal', icon:'🏠', name:'Personal Affairs'},
+  {id:'idea',     icon:'💡', name:'Important Idea of the Day'},
+  {id:'gratitude',icon:'🙏', name:'Gratitude'},
+  {id:'spiritual',icon:'🕉', name:'Spiritual Journey'},
+];
+
+/* Photos are downscaled before storage. A 4032x3024 iPhone shot lands around
+   180-350 KB at these settings, which is what makes a photo diary viable at all. */
+const IMG_MAX_DIM=1400, IMG_QUALITY=.72;
+
+const S={
+  secs:DEF_SECTIONS,
+  entries:{},
+  date:todayStr(),
+  picTgt:null,
+  flipping:false,
+  storage:'idb',      // 'idb' | 'ls' | 'none'
+  lastExp:null,
+};
+
+/* ══════════════════════════════════════════════════════════════
+   DATES  (all local-time — toISOString() would shift IST by 5:30)
+   ══════════════════════════════════════════════════════════════ */
+function todayStr(){return fmtKey(new Date());}
+function fmtKey(d){
+  return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');
+}
+function parseKey(s){
+  const [y,m,d]=s.split('-').map(Number);
+  return new Date(y,m-1,d,12,0,0);
+}
+function shiftKey(s,days){
+  const d=parseKey(s); d.setDate(d.getDate()+days); return fmtKey(d);
+}
+function weekNum(dateStr){
+  const d=parseKey(dateStr);
+  const t=new Date(Date.UTC(d.getFullYear(),d.getMonth(),d.getDate()));
+  const dayNum=(t.getUTCDay()+6)%7;
+  t.setUTCDate(t.getUTCDate()-dayNum+3);
+  const firstThu=new Date(Date.UTC(t.getUTCFullYear(),0,4));
+  const fDayNum=(firstThu.getUTCDay()+6)%7;
+  firstThu.setUTCDate(firstThu.getUTCDate()-fDayNum+3);
+  return 1+Math.round((t-firstThu)/(7*864e5));
+}
+
+/* ══════════════════════════════════════════════════════════════
+   STORAGE — IndexedDB, one record per day.
+   localStorage was the original design and it cannot work: iOS caps it
+   near 5 MB and a single base64 photo can exceed that on its own.
+   Writing per-day also means a keystroke no longer serialises the
+   entire diary (photos included) on every input event.
+   ══════════════════════════════════════════════════════════════ */
+const DB_NAME='dailyDiary', DB_VER=1;
+let idb=null;
+
+function openIDB(){
+  return new Promise(resolve=>{
+    let settled=false;
+    const finish=v=>{if(!settled){settled=true;resolve(v);}};
+    if(!('indexedDB' in window)){return finish(null);}
+    let req;
+    try{req=indexedDB.open(DB_NAME,DB_VER);}catch(e){return finish(null);}
+    req.onupgradeneeded=()=>{
+      const d=req.result;
+      if(!d.objectStoreNames.contains('days'))d.createObjectStore('days');
+      if(!d.objectStoreNames.contains('meta'))d.createObjectStore('meta');
+    };
+    req.onsuccess=()=>finish(req.result);
+    req.onerror=()=>finish(null);
+    req.onblocked=()=>finish(null);
+    // file:// origins can leave the request pending forever — don't hang the boot screen
+    setTimeout(()=>finish(null),4000);
+  });
+}
+function tx(store,mode){return idb.transaction(store,mode).objectStore(store);}
+function idbGet(store,key){
+  return new Promise(res=>{
+    try{const r=tx(store,'readonly').get(key); r.onsuccess=()=>res(r.result); r.onerror=()=>res(undefined);}
+    catch(e){res(undefined);}
+  });
+}
+function idbSet(store,key,val){
+  return new Promise((res,rej)=>{
+    try{
+      const t=idb.transaction(store,'readwrite');
+      t.objectStore(store).put(val,key);
+      t.oncomplete=()=>res(true);
+      t.onerror=()=>rej(t.error||new Error('write failed'));
+      t.onabort=()=>rej(t.error||new Error('write aborted'));
+    }catch(e){rej(e);}
+  });
+}
+function idbDel(store,key){
+  return new Promise(res=>{
+    try{const t=idb.transaction(store,'readwrite'); t.objectStore(store).delete(key); t.oncomplete=()=>res(true); t.onerror=()=>res(false);}
+    catch(e){res(false);}
+  });
+}
+function idbEntries(store){
+  return new Promise(res=>{
+    const out={};
+    try{
+      const r=tx(store,'readonly').openCursor();
+      r.onsuccess=()=>{const c=r.result; if(!c)return res(out); out[c.key]=c.value; c.continue();};
+      r.onerror=()=>res(out);
+    }catch(e){res(out);}
+  });
+}
+
+/* WebKit will occasionally accept an IndexedDB request and then never fire
+   any event on it. Every read on the boot path goes through this so a
+   silent stall degrades to a working app instead of a frozen screen. */
+function limit(promise,ms,fallback){
+  return Promise.race([promise,new Promise(res=>setTimeout(()=>res(fallback),ms))]);
+}
+function stage(s){
+  window.__stage=s;
+  const el=document.getElementById('bootStage');
+  if(el)el.textContent=s;
+}
+
+/* localStorage fallback (private browsing / IDB unavailable) */
+function lsRead(k){try{return JSON.parse(localStorage.getItem(k));}catch(e){return null;}}
+function lsWriteAll(){
+  try{
+    localStorage.setItem('d2_secs',JSON.stringify(S.secs));
+    localStorage.setItem('d2_ent',JSON.stringify(S.entries));
+    return true;
+  }catch(e){return false;}
+}
+
+const dirtyDays=new Set();
+let saveTimer=null;
+function queueSave(date){
+  if(date)dirtyDays.add(date);
+  clearTimeout(saveTimer);
+  saveTimer=setTimeout(flushSave,350);
+}
+async function flushSave(){
+  clearTimeout(saveTimer); saveTimer=null;
+  if(S.storage==='idb'){
+    const days=[...dirtyDays]; dirtyDays.clear();
+    try{
+      for(const d of days){
+        const e=S.entries[d];
+        if(e && hasContent(e)) await idbSet('days',d,e);
+        else { delete S.entries[d]; await idbDel('days',d); }
+      }
+      await idbSet('meta','secs',S.secs);
+      await idbSet('meta','lastExp',S.lastExp);
+    }catch(err){
+      toast('Could not save — free up space','err');
+      console.error(err);
+    }
+  }else if(S.storage==='ls'){
+    dirtyDays.clear();
+    if(!lsWriteAll())toast('Storage full — export now!','err');
+    try{localStorage.setItem('d2_lexp',S.lastExp||'');}catch(e){}
+  }else{
+    dirtyDays.clear();
+  }
+}
+// last-chance flush when the app is backgrounded / swiped away
+document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='hidden'&&saveTimer)flushSave();});
+window.addEventListener('pagehide',()=>{if(saveTimer)flushSave();});
+
+function hasContent(e){
+  return Object.keys(e||{}).some(k=>{
+    const v=e[k];
+    return v && ((v.bullets&&v.bullets.some(b=>b&&b.trim())) || (v.pics&&v.pics.length));
+  });
+}
+
+/* ══════════════════════════════════════════════════════════════
+   BOOT
+   ══════════════════════════════════════════════════════════════ */
+async function boot(){
+  stage('sizing');
+  fitViewport();
+
+  stage('opening storage');
+  idb=await openIDB();
+  S.storage = idb ? 'idb' : (lsAvailable() ? 'ls' : 'none');
+
+  if(S.storage==='idb'){
+    stage('reading entries');
+    S.entries=await limit(idbEntries('days'),6000,null);
+    if(S.entries===null){
+      // the database answered the open but not the read — don't sit here
+      S.entries={}; idb=null;
+      S.storage=lsAvailable()?'ls':'none';
+    }
+  }
+
+  if(S.storage==='idb'){
+    stage('reading settings');
+    S.secs=await limit(idbGet('meta','secs'),4000,null);
+    S.lastExp=(await limit(idbGet('meta','lastExp'),4000,null))||null;
+    if(!S.secs||!S.secs.length){
+      stage('first run');
+      // one-time migration from the old localStorage build
+      const oldSecs=lsRead('d2_secs'), oldEnt=lsRead('d2_ent');
+      S.secs=(oldSecs&&oldSecs.length)?oldSecs:DEF_SECTIONS.slice();
+      if(oldEnt&&Object.keys(oldEnt).length&&!Object.keys(S.entries).length){
+        stage('moving old entries');
+        S.entries=oldEnt;
+        Object.keys(oldEnt).forEach(d=>dirtyDays.add(d));
+        try{S.lastExp=S.lastExp||localStorage.getItem('d2_lexp')||null;}catch(e){}
+        await limit(flushSave(),8000,null);
+        toast('Moved your old entries to safe storage');
+      }else{
+        await limit(idbSet('meta','secs',S.secs).catch(()=>{}),4000,null);
+      }
+    }
+  }else if(S.storage==='ls'){
+    stage('reading entries');
+    S.secs=lsRead('d2_secs')||DEF_SECTIONS.slice();
+    S.entries=lsRead('d2_ent')||{};
+    try{S.lastExp=localStorage.getItem('d2_lexp')||null;}catch(e){}
+  }else{
+    S.secs=DEF_SECTIONS.slice();
+  }
+
+  stage('drawing');
+  wire();
+  renderPage();
+
+  window.__booted=true;
+  document.getElementById('boot').classList.add('gone');
+
+  if(S.storage==='none')toast('Nothing can be saved here — see Manage','err');
+  else if(S.storage==='ls')toast('Limited storage — keep photos few','err');
+  checkRem();
+}
+function lsAvailable(){
+  try{localStorage.setItem('_t','1');localStorage.removeItem('_t');return true;}catch(e){return false;}
+}
+
+/* ══════════════════════════════════════════════════════════════
+   VIEWPORT — the iOS keyboard shrinks visualViewport but not the
+   layout viewport, so without this the focused line hides behind it.
+   ══════════════════════════════════════════════════════════════ */
+function fitViewport(){
+  const vv=window.visualViewport;
+  const h=vv?vv.height:window.innerHeight;
+  document.documentElement.style.setProperty('--appH',h+'px');
+}
+if(window.visualViewport){
+  window.visualViewport.addEventListener('resize',fitViewport);
+  window.visualViewport.addEventListener('scroll',()=>{window.scrollTo(0,0);});
+}
+window.addEventListener('orientationchange',()=>setTimeout(fitViewport,250));
+window.addEventListener('resize',fitViewport);
+
+/* ══════════════════════════════════════════════════════════════
+   MODEL
+   ══════════════════════════════════════════════════════════════ */
+function gE(d,sid){return (S.entries[d]||{})[sid];}
+function ensure(d,sid){
+  if(!S.entries[d])S.entries[d]={};
+  const e=S.entries[d];
+  if(!e[sid])e[sid]={bullets:[],pics:[]};
+  if(!Array.isArray(e[sid].bullets))e[sid].bullets=[];
+  if(!Array.isArray(e[sid].pics))e[sid].pics=[];
+  return e[sid];
+}
+
+/* ══════════════════════════════════════════════════════════════
+   RENDER
+   ══════════════════════════════════════════════════════════════ */
+function renderPage(){
+  const dt=parseKey(S.date);
+  const isToday=S.date===todayStr();
+  document.getElementById('mDow').textContent=dt.toLocaleDateString('en-IN',{weekday:'long'}).toUpperCase();
+  document.getElementById('mDate').textContent=dt.getDate();
+  document.getElementById('mMonth').textContent=MON[dt.getMonth()]+(isToday?' · today':'');
+  document.getElementById('mYear').textContent=dt.getFullYear();
+  document.getElementById('mWeek').innerHTML='Week <b>'+weekNum(S.date)+'</b>';
+
+  document.getElementById('dnMid').innerHTML=isToday
+    ? '<b>Today</b> · '+dt.toLocaleDateString('en-IN',{day:'numeric',month:'short'})
+    : dt.toLocaleDateString('en-IN',{weekday:'short'})+' <b>'+dt.getDate()+' '+dt.toLocaleDateString('en-IN',{month:'short'})+'</b>';
+  document.getElementById('dnNext').disabled=isToday;
+
+  const body=document.getElementById('pgBody');
+  body.innerHTML='';
+  S.secs.forEach((sec,i)=>body.appendChild(buildSec(sec,i)));
+  body.querySelectorAll('textarea.bullet-inp').forEach(grow);
+}
+
+function buildSec(sec,idx){
+  const e=gE(S.date,sec.id)||{bullets:[],pics:[]};
+  const bullets=e.bullets||[], pics=e.pics||[];
+
+  const wrap=el('div','sec');
+  wrap.dataset.sid=sec.id;
+
+  const hd=el('div','sec-hd');
+  hd.appendChild(el('span','sec-no',(ROMAN[idx]||(idx+1))+'.'));
+  hd.appendChild(el('span','sec-name',sec.name));
+  const filled=bullets.filter(b=>b&&b.trim()).length;
+  if(filled||pics.length){
+    hd.appendChild(el('span','sec-count',[filled?filled+'':'',pics.length?'📸'+pics.length:''].filter(Boolean).join(' · ')));
+  }
+  hd.appendChild(el('span','sec-icon',sec.icon||''));
+  wrap.appendChild(hd);
+  wrap.appendChild(el('div','sec-underline'));
+
+  // all bullets are shown — the page scrolls, so there is no reason to hide
+  // them behind a "3 more…" sheet while you are trying to write
+  const list=el('div','bullets');
+  bullets.forEach((b,i)=>list.appendChild(bulletRow(sec.id,b,i)));
+  wrap.appendChild(list);
+
+  const add=el('button','add-bullet');
+  add.appendChild(el('span','plus','＋'));
+  add.appendChild(document.createTextNode(' Add point'));
+  add.addEventListener('click',()=>addBullet(sec.id));
+  wrap.appendChild(add);
+
+  const row=el('div','pics-row');
+  pics.forEach((src,i)=>{
+    const p=el('div','pic');
+    const img=document.createElement('img');
+    img.src=src; img.alt='';
+    img.addEventListener('click',()=>showPic(sec.id,i));
+    const x=el('button','pic-x','✕');
+    x.addEventListener('click',ev=>{ev.stopPropagation();delPic(sec.id,i);});
+    p.appendChild(img); p.appendChild(x);
+    row.appendChild(p);
+  });
+  const ap=el('div','add-pic');
+  ap.appendChild(el('span','ap-plus','＋'));
+  ap.appendChild(el('span','ap-lbl','Photo'));
+  ap.addEventListener('click',()=>addPics(sec.id));
+  row.appendChild(ap);
+  wrap.appendChild(row);
+
+  return wrap;
+}
+
+function bulletRow(sid,text,i){
+  const row=el('div','bullet');
+  row.dataset.i=i;
+  row.appendChild(el('span','bullet-mark'));
+
+  const ta=document.createElement('textarea');
+  ta.className='bullet-inp';
+  ta.rows=1;
+  ta.value=text||'';
+  ta.placeholder='Write a point…';
+  ta.setAttribute('enterkeyhint','enter');
+  ta.setAttribute('autocapitalize','sentences');
+  ta.setAttribute('autocorrect','on');
+  ta.addEventListener('input',()=>{
+    const idx=+row.dataset.i;
+    ensure(S.date,sid).bullets[idx]=ta.value;
+    grow(ta);
+    queueSave(S.date);
+  });
+  ta.addEventListener('focus',()=>{
+    grow(ta);
+    setTimeout(()=>ta.scrollIntoView({block:'center',behavior:'smooth'}),260);
+  });
+  // Return starts the next point instead of inserting a newline
+  ta.addEventListener('keydown',ev=>{
+    if(ev.key==='Enter'&&!ev.shiftKey){ev.preventDefault();addBullet(sid);}
+  });
+  row.appendChild(ta);
+
+  const x=el('button','bullet-x','✕');
+  x.addEventListener('click',()=>delBullet(sid,+row.dataset.i));
+  row.appendChild(x);
+  return row;
+}
+
+function el(tag,cls,txt){
+  const n=document.createElement(tag);
+  if(cls)n.className=cls;
+  if(txt!==undefined&&txt!==null)n.textContent=txt;
+  return n;
+}
+function secNode(sid){return document.querySelector('.sec[data-sid="'+cssEsc(sid)+'"]');}
+function cssEsc(s){return String(s).replace(/["\\]/g,'\\$&');}
+function secIndex(sid){return S.secs.findIndex(s=>s.id===sid);}
+
+function refreshSec(sid){
+  const old=secNode(sid);
+  if(!old)return renderPage();
+  const idx=secIndex(sid);
+  const fresh=buildSec(S.secs[idx],idx);
+  old.replaceWith(fresh);
+  fresh.querySelectorAll('textarea.bullet-inp').forEach(grow);
+}
+
+/* ══════════════════════════════════════════════════════════════
+   BULLET OPS
+   ══════════════════════════════════════════════════════════════ */
+function addBullet(sid){
+  const e=ensure(S.date,sid);
+  const i=e.bullets.length;
+  e.bullets.push('');
+  queueSave(S.date);
+  // append in place so the keyboard never closes mid-thought
+  const sec=secNode(sid);
+  if(!sec){renderPage();return;}
+  const list=sec.querySelector('.bullets');
+  const row=bulletRow(sid,'',i);
+  list.appendChild(row);
+  const ta=row.querySelector('textarea');
+  grow(ta); ta.focus();
+}
+function delBullet(sid,i){
+  const e=ensure(S.date,sid);
+  e.bullets.splice(i,1);
+  queueSave(S.date);
+  refreshSec(sid);   // reindexes the remaining rows
+}
+
+/* ══════════════════════════════════════════════════════════════
+   PHOTOS
+   ══════════════════════════════════════════════════════════════ */
+function addPics(sid){
+  S.picTgt=sid;
+  const fp=document.getElementById('filePick');
+  fp.value='';
+  fp.click();
+}
+function loadImgEl(blob){
+  return new Promise((res,rej)=>{
+    const url=URL.createObjectURL(blob);
+    const img=new Image();
+    img.onload=()=>{URL.revokeObjectURL(url);res(img);};
+    img.onerror=()=>{URL.revokeObjectURL(url);rej(new Error('decode failed'));};
+    img.src=url;
+  });
+}
+async function shrink(file){
+  let src=null,w=0,h=0,bmp=null;
+  if(window.createImageBitmap){
+    try{ bmp=await createImageBitmap(file,{imageOrientation:'from-image'}); }
+    catch(e){ try{ bmp=await createImageBitmap(file); }catch(e2){ bmp=null; } }
+  }
+  if(bmp){src=bmp;w=bmp.width;h=bmp.height;}
+  else{const img=await loadImgEl(file);src=img;w=img.naturalWidth;h=img.naturalHeight;}
+  if(!w||!h)throw new Error('empty image');
+
+  const sc=Math.min(1,IMG_MAX_DIM/Math.max(w,h));
+  const cw=Math.max(1,Math.round(w*sc)), ch=Math.max(1,Math.round(h*sc));
+  const c=document.createElement('canvas');
+  c.width=cw; c.height=ch;
+  const ctx=c.getContext('2d');
+  ctx.fillStyle='#fff'; ctx.fillRect(0,0,cw,ch);
+  ctx.drawImage(src,0,0,cw,ch);
+  if(bmp&&bmp.close)bmp.close();
+  return c.toDataURL('image/jpeg',IMG_QUALITY);
+}
+async function onPics(ev){
+  const files=Array.from(ev.target.files||[]);
+  const sid=S.picTgt;
+  if(!files.length||!sid)return;
+  toast('Adding '+files.length+' photo'+(files.length>1?'s':'')+'…');
+  let ok=0,fail=0;
+  for(const f of files){
+    try{
+      const data=await shrink(f);
+      ensure(S.date,sid).pics.push(data);
+      ok++;
+    }catch(err){fail++;console.error('photo failed',f.name,err);}
+  }
+  dirtyDays.add(S.date);
+  await flushSave();
+  refreshSec(sid);
+  toast(ok+' photo'+(ok===1?'':'s')+' added 📸'+(fail?' · '+fail+' failed':''), fail?'err':'ok');
+}
+function delPic(sid,i){
+  const e=ensure(S.date,sid);
+  e.pics.splice(i,1);
+  queueSave(S.date);
+  refreshSec(sid);
+}
+function showPic(sid,i){
+  const e=gE(S.date,sid);
+  if(e&&e.pics&&e.pics[i]){
+    document.getElementById('lboxImg').src=e.pics[i];
+    document.getElementById('lbox').classList.add('show');
+  }
+}
+
+/* ══════════════════════════════════════════════════════════════
+   PAGE TURN
+   ══════════════════════════════════════════════════════════════ */
+function flip(dir){
+  if(S.flipping)return;
+  const nxt=shiftKey(S.date,dir);
+  if(nxt>todayStr())return;
+  S.flipping=true;
+  if(document.activeElement&&document.activeElement.blur)document.activeElement.blur();
+  const pg=document.getElementById('pageEl');
+  pg.classList.add(dir>0?'out-n':'out-p');
+  setTimeout(()=>{
+    S.date=nxt;
+    renderPage();
+    document.getElementById('pgBody').scrollTop=0;
+    pg.classList.remove('out-n','out-p');
+    pg.classList.add(dir>0?'in-n':'in-p');
+    setTimeout(()=>{pg.classList.remove('in-n','in-p');S.flipping=false;},210);
+  },160);
+}
+function goToday(){
+  if(S.date===todayStr()){toast('Already on today');return;}
+  S.date=todayStr(); renderPage();
+  document.getElementById('pgBody').scrollTop=0;
+  toast('Back to today');
+}
+
+/* ══════════════════════════════════════════════════════════════
+   ARCHIVE
+   ══════════════════════════════════════════════════════════════ */
+function renderArchive(){
+  const wrap=document.getElementById('arcScroll');
+  const dates=Object.keys(S.entries).filter(d=>hasContent(S.entries[d])).sort((a,b)=>b.localeCompare(a));
+
+  if(!dates.length){
+    wrap.innerHTML='';
+    const em=el('div','empty');
+    em.appendChild(el('div','empty-em','📖'));
+    em.appendChild(el('div','empty-t','No entries yet'));
+    em.appendChild(el('p',null,"Write on today's page and it appears here."));
+    wrap.appendChild(em);
+    return;
+  }
+
+  const tree={};
+  dates.forEach(d=>{
+    const dt=parseKey(d), y=dt.getFullYear(), m=dt.getMonth();
+    (tree[y]=tree[y]||{});
+    (tree[y][m]=tree[y][m]||[]).push(d);
+  });
+
+  wrap.innerHTML='';
+  Object.keys(tree).sort((a,b)=>b-a).forEach(y=>{
+    wrap.appendChild(el('div','arc-yr',y));
+    Object.keys(tree[y]).sort((a,b)=>b-a).forEach(m=>{
+      const days=tree[y][m];
+      const mo=el('div','arc-mo');
+      mo.appendChild(el('span',null,MON[m]));
+      mo.appendChild(el('span','arc-mo-cnt',days.length+(days.length===1?' entry':' entries')));
+      wrap.appendChild(mo);
+
+      days.forEach(d=>{
+        const dt=parseKey(d), e=S.entries[d]||{};
+        let thumb=null,pc=0,first='';
+        S.secs.forEach(sec=>{
+          const v=e[sec.id]; if(!v)return;
+          if(v.pics&&v.pics.length){pc+=v.pics.length; if(!thumb)thumb=v.pics[0];}
+          if(!first&&v.bullets){const b=v.bullets.find(x=>x&&x.trim()); if(b)first=b.trim();}
+        });
+
+        const row=el('div','arc-day');
+        const th=el('div','arc-thumb');
+        if(thumb){const im=document.createElement('img');im.src=thumb;im.alt='';th.appendChild(im);}
+        else th.textContent='📄';
+        row.appendChild(th);
+
+        const lbl=el('div','arc-lbl');
+        const dl=el('div','arc-date');
+        dl.appendChild(document.createTextNode(dt.toLocaleDateString('en-IN',{weekday:'long',day:'numeric'})+' '));
+        dl.appendChild(el('span','arc-week','· wk '+weekNum(d)));
+        lbl.appendChild(dl);
+        if(first)lbl.appendChild(el('div','arc-prev',first));
+        row.appendChild(lbl);
+
+        if(pc)row.appendChild(el('span','arc-pics','📸 '+pc));
+        row.addEventListener('click',()=>{S.date=d;goTab('Diary');});
+        wrap.appendChild(row);
+      });
+    });
+  });
+}
+
+/* ══════════════════════════════════════════════════════════════
+   MANAGE
+   ══════════════════════════════════════════════════════════════ */
+function renderSettings(){
+  const last=S.lastExp?new Date(S.lastExp).toLocaleDateString('en-IN',{day:'numeric',month:'long',year:'numeric'}):'Never';
+  const days=Object.keys(S.entries).filter(d=>hasContent(S.entries[d])).length;
+  let pics=0;
+  Object.values(S.entries).forEach(e=>Object.values(e||{}).forEach(v=>{if(v&&v.pics)pics+=v.pics.length;}));
+
+  const store=S.storage==='idb'?'IndexedDB (large)':S.storage==='ls'?'localStorage (≈5 MB — small!)':'none (private mode)';
+
+  const wrap=document.getElementById('setScroll');
+  wrap.innerHTML=
+    '<div class="info-box"><strong>📱 Install:</strong> open this page in <strong>Safari</strong> → Share → “Add to Home Screen”. Do not open it from WhatsApp or another app’s browser — that gets a different storage box each time.</div>'+
+    (S.storage!=='idb'?'<div class="info-box warn"><strong>⚠ Storage:</strong> '+store+'. Photos may fail to save. Turn off Private Browsing and reopen in Safari.</div>':'')+
+    '<div class="info-box"><strong>📚 In this diary:</strong> '+days+' day'+(days===1?'':'s')+' · '+pics+' photo'+(pics===1?'':'s')+'<br><strong>💾 Last export:</strong> '+esc(last)+'<br>Storage: '+esc(store)+'</div>'+
+    '<button class="f-btn f-btn-p" id="setExport">Export for the laptop</button>'+
+    '<button class="f-btn f-btn-g" id="setImport">Restore from a backup file</button>'+
+    '<div style="height:22px"></div>'+
+    '<div class="set-lbl">Sections</div>'+
+    '<div id="secSetList"></div>'+
+    '<div style="display:flex;gap:8px;margin-top:12px">'+
+      '<input class="f-inp" id="newSecInp" type="text" placeholder="🎯 New section name…" style="margin-bottom:0;flex:1">'+
+      '<button class="f-btn f-btn-p" id="setAddSec" style="width:auto;margin-top:0;padding:11px 16px">Add</button>'+
+    '</div>'+
+    '<div style="height:30px"></div>';
+
+  document.getElementById('setExport').addEventListener('click',doExport);
+  document.getElementById('setImport').addEventListener('click',()=>{
+    const jp=document.getElementById('jsonPick'); jp.value=''; jp.click();
+  });
+  document.getElementById('setAddSec').addEventListener('click',addSec);
+  renderSecSet();
+}
+function renderSecSet(){
+  const list=document.getElementById('secSetList');
+  if(!list)return;
+  list.innerHTML='';
+  S.secs.forEach((s,i)=>{
+    const row=el('div','set-row');
+    row.appendChild(el('span',null,s.icon||'📝')).style.fontSize='15px';
+    row.appendChild(el('span','set-name',s.name));
+    const mk=(txt,cls,fn)=>{const b=el('button','i-btn'+(cls?' '+cls:''),txt);b.addEventListener('click',fn);row.appendChild(b);};
+    mk('↑',null,()=>mvSec(i,-1));
+    mk('↓',null,()=>mvSec(i,1));
+    mk('Rename',null,()=>renSec(i));
+    mk('✕','d',()=>delSec(i));
+    list.appendChild(row);
+  });
+}
+function mvSec(i,dir){
+  const j=i+dir; if(j<0||j>=S.secs.length)return;
+  [S.secs[i],S.secs[j]]=[S.secs[j],S.secs[i]];
+  queueSave(); renderSecSet();
+}
+function renSec(i){
+  const nn=prompt('New name:',S.secs[i].name);
+  if(!nn||!nn.trim())return;
+  const {icon,name}=splitIcon(nn.trim());
+  S.secs[i].name=name||S.secs[i].name;
+  if(icon)S.secs[i].icon=icon;
+  queueSave(); renderSecSet(); toast('Renamed ✓');
+}
+function delSec(i){
+  const s=S.secs[i];
+  if(!confirm('Remove "'+s.name+'" from the page?\n\nAlready-written entries stay in your data and still show in the laptop viewer.'))return;
+  S.secs.splice(i,1);
+  queueSave(); renderSecSet(); toast('Removed');
+}
+function addSec(){
+  const inp=document.getElementById('newSecInp');
+  const raw=(inp.value||'').trim();
+  if(!raw)return;
+  const {icon,name}=splitIcon(raw);
+  if(!name)return;
+  S.secs.push({id:'c'+Date.now().toString(36),icon:icon||'📝',name});
+  queueSave(); inp.value=''; renderSecSet(); toast('Added');
+}
+// "🎯 Goals" → icon 🎯, name Goals
+function splitIcon(str){
+  // Deliberately no \p{...} Unicode property escape here: an engine that
+  // does not support one fails to PARSE the regex literal, and a parse
+  // error kills this entire script before a single line runs \u2014 which
+  // leaves the boot screen up forever with no error anywhere.
+  const sp=str.indexOf(' ');
+  if(sp>0){
+    const head=str.slice(0,sp);
+    // a short leading token containing no printable ASCII is an emoji
+    if(head.length<=8&&!/[\x20-\x7E]/.test(head)){
+      const rest=str.slice(sp+1).trim();
+      if(rest)return {icon:head,name:rest};
+    }
+  }
+  return {icon:null,name:str};
+}
+
+/* ══════════════════════════════════════════════════════════════
+   EXPORT / IMPORT  (same JSON shape the Book Viewer reads)
+   ══════════════════════════════════════════════════════════════ */
+function buildExport(){
+  const entries={};
+  Object.keys(S.entries).forEach(d=>{if(hasContent(S.entries[d]))entries[d]=S.entries[d];});
+  return JSON.stringify({
+    app:'my-diary', version:2,
+    exportedAt:new Date().toISOString(),
+    sections:S.secs,
+    entries
+  },null,1);
+}
+async function doExport(){
+  const json=buildExport();
+  const name='my-diary-'+todayStr()+'.json';
+  const blob=new Blob([json],{type:'application/json'});
+
+  // Web Share is the natural route to AirDrop / Files on iOS
+  if(navigator.canShare&&window.File){
+    try{
+      const file=new File([blob],name,{type:'application/json'});
+      if(navigator.canShare({files:[file]})){
+        await navigator.share({files:[file],title:'My Diary backup'});
+        markExported();
+        return;
+      }
+    }catch(err){
+      if(err&&err.name==='AbortError')return;   // user cancelled — not a failure
+    }
+  }
+
+  // download fallback: the anchor must be in the DOM, and the URL must
+  // outlive the click or Safari aborts the save
+  const url=URL.createObjectURL(blob);
+  const a=document.createElement('a');
+  a.href=url; a.download=name; a.rel='noopener';
+  a.style.display='none';
+  document.body.appendChild(a);
+  a.click();
+  setTimeout(()=>{URL.revokeObjectURL(url);a.remove();},4000);
+  markExported();
+}
+function markExported(){
+  S.lastExp=new Date().toISOString();
+  queueSave();
+  toast('Exported ✓ — open it in the laptop viewer');
+}
+
+async function onJson(ev){
+  const f=(ev.target.files||[])[0];
+  if(!f)return;
+  let j;
+  try{ j=JSON.parse(await f.text()); }
+  catch(e){ toast('That file is not valid diary JSON','err'); return; }
+  if(!j||typeof j!=='object'||!j.entries){ toast('No entries found in that file','err'); return; }
+
+  const incoming=Object.keys(j.entries);
+  if(!confirm('Restore '+incoming.length+' day'+(incoming.length===1?'':'s')+' from "'+f.name+'"?\n\nExisting days with the same date will be merged — nothing already written is deleted.'))return;
+
+  if(Array.isArray(j.sections)&&j.sections.length){
+    const known=new Set(S.secs.map(s=>s.id));
+    j.sections.forEach(s=>{if(s&&s.id&&!known.has(s.id)){S.secs.push(s);known.add(s.id);}});
+  }
+  incoming.forEach(d=>{
+    const src=j.entries[d]||{};
+    Object.keys(src).forEach(sid=>{
+      const v=src[sid]||{};
+      const tgt=ensure(d,sid);
+      (v.bullets||[]).forEach(b=>{if(b&&b.trim()&&!tgt.bullets.includes(b))tgt.bullets.push(b);});
+      if(v.text&&v.text.trim()&&!tgt.bullets.includes(v.text.trim()))tgt.bullets.push(v.text.trim());
+      (v.pics||[]).forEach(p=>{if(p&&!tgt.pics.includes(p))tgt.pics.push(p);});
+    });
+    dirtyDays.add(d);
+  });
+  await flushSave();
+  toast('Restored ✓');
+  renderSettings();
+}
+
+function checkRem(){
+  const now=Date.now();
+  let snz=null;
+  try{snz=localStorage.getItem('d2_snz');}catch(e){}
+  if(snz&&now<parseInt(snz,10))return;
+  if(!S.lastExp){S.lastExp=new Date().toISOString();queueSave();return;}
+  const days=Math.floor((now-new Date(S.lastExp).getTime())/864e5);
+  if(days>=7){
+    document.getElementById('remDays').textContent=days;
+    setTimeout(()=>openOv('ovRem'),1200);
+  }
+}
+function snooze(){
+  try{localStorage.setItem('d2_snz',String(Date.now()+864e5));}catch(e){}
+  closeOv('ovRem'); toast('Tomorrow then');
+}
+
+/* ══════════════════════════════════════════════════════════════
+   TABS + WIRING
+   ══════════════════════════════════════════════════════════════ */
+function goTab(t){
+  ['Diary','Archive','Settings'].forEach(x=>{
+    document.getElementById('tab'+x).classList.toggle('on',x===t);
+    document.getElementById('bb'+x).classList.toggle('on',x===t);
+  });
+  if(t==='Diary')renderPage();
+  else if(t==='Archive')renderArchive();
+  else renderSettings();
+}
+
+function wire(){
+  document.getElementById('btnToday').addEventListener('click',goToday);
+  document.getElementById('btnExport').addEventListener('click',doExport);
+  document.getElementById('dnPrev').addEventListener('click',()=>flip(-1));
+  document.getElementById('dnNext').addEventListener('click',()=>flip(1));
+  document.getElementById('dnMid').addEventListener('click',goToday);
+  document.getElementById('bbDiary').addEventListener('click',()=>goTab('Diary'));
+  document.getElementById('bbArchive').addEventListener('click',()=>goTab('Archive'));
+  document.getElementById('bbSettings').addEventListener('click',()=>goTab('Settings'));
+  document.getElementById('filePick').addEventListener('change',onPics);
+  document.getElementById('jsonPick').addEventListener('change',onJson);
+  document.getElementById('remExport').addEventListener('click',()=>{doExport();closeOv('ovRem');});
+  document.getElementById('remSnooze').addEventListener('click',snooze);
+  document.getElementById('ovRem').addEventListener('click',ev=>{if(ev.target.id==='ovRem')closeOv('ovRem');});
+
+  // swipe between days — ignored while typing so the caret drag still works
+  const area=document.getElementById('bookArea');
+  let tx=null,ty=null;
+  area.addEventListener('touchstart',e=>{
+    if(e.touches.length!==1||e.target.closest('textarea,.pics-row')){tx=null;return;}
+    tx=e.touches[0].clientX; ty=e.touches[0].clientY;
+  },{passive:true});
+  area.addEventListener('touchend',e=>{
+    if(tx===null)return;
+    const dx=e.changedTouches[0].clientX-tx, dy=e.changedTouches[0].clientY-ty;
+    if(Math.abs(dx)>65&&Math.abs(dx)>Math.abs(dy)*1.6)flip(dx<0?1:-1);
+    tx=null; ty=null;
+  },{passive:true});
+}
+
+/* ══════════════════════════════════════════════════════════════
+   UTILS
+   ══════════════════════════════════════════════════════════════ */
+let _tt;
+function toast(m,t='ok'){
+  const e=document.getElementById('toast');
+  e.textContent=m;
+  e.className='show'+(t==='err'?' err':'');
+  clearTimeout(_tt);
+  _tt=setTimeout(()=>{e.className='';},2600);
+}
+function openOv(id){document.getElementById(id).classList.add('show');}
+function closeOv(id){document.getElementById(id).classList.remove('show');}
+function esc(s){
+  if(s===null||s===undefined)return'';
+  return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+function grow(ta){ta.style.height='auto';ta.style.height=Math.max(26,ta.scrollHeight)+'px';}
+
+boot().catch(err=>{
+  console.error(err);
+  if(window.__panel){
+    window.__panel('The diary could not start.',
+      '<code style="color:#D8B98A;font-size:12.5px">'+esc(err&&err.message)+'</code>');
+    return;
+  }
+  document.getElementById('boot').innerHTML=
+    '<div style="padding:30px;color:#E9D9B4;font-family:-apple-system,sans-serif;font-style:normal;text-align:center;line-height:1.7">'+
+    '<div style="font-size:34px;margin-bottom:12px">⚠️</div>Could not start:<br>'+esc(err&&err.message)+'</div>';
+});
+</script>
+</body>
+</html>

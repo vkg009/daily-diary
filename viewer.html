@@ -1,0 +1,737 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex, nofollow, noarchive">
+<title>My Diary — Book Viewer</title>
+<style>
+:root{
+  --paper:#F7F1E4; --paper2:#EFE5CF; --edge:#D8C9AC;
+  --ink:#1C1006; --ink2:#4C3522; --ink3:#7C5F45; --rule:#CFC0A2;
+  --acc:#75381B; --gold:#A97E3F; --ok:#33664F; --bad:#8A2A2A;
+  --desk:#2E2418;
+  --serif: 'Iowan Old Style', Palatino, Georgia, 'Times New Roman', serif;
+  --sans: -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif;
+}
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0;}
+html,body{height:100%;overflow:hidden;}
+body{
+  background:
+    radial-gradient(ellipse at 50% 0%, #3B2E1D, var(--desk) 70%);
+  font-family:var(--sans); font-size:16px; color:var(--ink);
+  -webkit-font-smoothing:antialiased;
+}
+#app{display:flex; flex-direction:column; height:100%; min-height:0;}
+
+/* ═══ TOP BAR ═══ */
+#topbar{
+  flex:0 0 auto; min-height:56px; background:rgba(0,0,0,.28);
+  display:flex; align-items:center; justify-content:space-between; gap:14px;
+  padding:9px 20px; flex-wrap:wrap;
+  border-bottom:1px solid rgba(255,255,255,.06);
+}
+.tb-title{font-family:var(--serif); font-size:19px; font-style:italic; color:#E2D2B2; white-space:nowrap;}
+.tb-right{display:flex; align-items:center; gap:9px; flex-wrap:wrap;}
+.tb-btn{
+  background:rgba(255,255,255,.1); border:1px solid rgba(255,255,255,.2);
+  color:#E2D2B2; border-radius:8px; padding:8px 14px; font-size:13px;
+  cursor:pointer; font-family:var(--sans); white-space:nowrap;
+}
+.tb-btn:hover{background:rgba(255,255,255,.2);}
+.tb-btn:disabled{opacity:.35; cursor:default;}
+.tb-stats{font-size:12px; color:#A89878; white-space:nowrap;}
+#search{
+  background:rgba(0,0,0,.3); border:1px solid rgba(255,255,255,.16);
+  color:#EADCBE; border-radius:8px; padding:8px 12px; font-size:13px;
+  width:190px; font-family:var(--sans); outline:none;
+}
+#search:focus{border-color:rgba(201,180,136,.55);}
+#search::placeholder{color:#8A7A5C;}
+#searchInfo{font-size:11.5px; color:#A89878; white-space:nowrap; min-width:0;}
+
+/* ═══ BOOK STAGE ═══ */
+#stage{
+  flex:1 1 auto; min-height:0;
+  display:flex; align-items:center; justify-content:center;
+  perspective:2600px; position:relative; padding:22px 66px;
+}
+#book{
+  width:min(1240px,100%); height:100%; max-height:900px;
+  display:flex; position:relative;
+  filter:drop-shadow(0 20px 44px rgba(0,0,0,.55));
+}
+#book::before{
+  content:''; position:absolute; inset:-14px -12px;
+  background:linear-gradient(135deg,#5A3620,#3E2412);
+  border-radius:12px; z-index:0;
+}
+#book::after{
+  content:''; position:absolute; left:50%; top:-6px; bottom:-6px; width:5px;
+  transform:translateX(-50%);
+  background:linear-gradient(90deg,rgba(0,0,0,.45),rgba(0,0,0,.12),rgba(0,0,0,.45));
+  z-index:20; pointer-events:none;
+}
+body.single #book::after{display:none;}
+
+.bpage{
+  width:50%; height:100%; position:relative; z-index:1;
+  background:radial-gradient(ellipse at top left, rgba(255,255,255,.45), transparent 60%), var(--paper);
+  overflow:hidden;
+  display:flex; flex-direction:column; min-height:0;
+}
+body.single .bpage{width:100%;}
+body.single .bpage.right{display:none;}
+.bpage.left{border-radius:8px 0 0 8px;}
+.bpage.right{border-radius:0 8px 8px 0;}
+body.single .bpage.left{border-radius:8px;}
+.bpage.left::after{content:'';position:absolute;right:0;top:0;bottom:0;width:44px;background:linear-gradient(90deg,transparent,rgba(0,0,0,.09));pointer-events:none;z-index:5;}
+.bpage.right::after{content:'';position:absolute;left:0;top:0;bottom:0;width:44px;background:linear-gradient(270deg,transparent,rgba(0,0,0,.09));pointer-events:none;z-index:5;}
+body.single .bpage.left::after{display:none;}
+.bpage.left::before{content:'';position:absolute;left:-6px;top:4px;bottom:4px;width:6px;background:repeating-linear-gradient(180deg,var(--edge) 0 2px,var(--paper2) 2px 4px);border-radius:3px 0 0 3px;}
+.bpage.right::before{content:'';position:absolute;right:-6px;top:4px;bottom:4px;width:6px;background:repeating-linear-gradient(180deg,var(--edge) 0 2px,var(--paper2) 2px 4px);border-radius:0 3px 3px 0;}
+
+.flipping-next .bpage.right{animation:flipR .42s ease-in-out;transform-origin:left center;}
+.flipping-prev .bpage.left{animation:flipL .42s ease-in-out;transform-origin:right center;}
+@keyframes flipR{0%{transform:rotateY(0);}50%{transform:rotateY(-62deg);}100%{transform:rotateY(0);}}
+@keyframes flipL{0%{transform:rotateY(0);}50%{transform:rotateY(62deg);}100%{transform:rotateY(0);}}
+
+/* ═══ PAGE CONTENT ═══ */
+.pg-hdr{
+  flex:0 0 auto; padding:26px 38px 13px; border-bottom:1px solid var(--rule);
+  display:flex; align-items:flex-end; justify-content:space-between; gap:16px;
+}
+.pg-hdr.right-side{padding-left:46px;}
+.pg-hdr.left-side{padding-right:46px;}
+.pg-dow{font-family:var(--serif); font-size:10px; letter-spacing:3.5px; text-transform:uppercase; color:var(--acc); font-weight:600; margin-bottom:4px;}
+.pg-date{font-family:var(--serif); font-size:29px; font-weight:600; color:var(--ink); line-height:1.05;}
+.pg-yr{font-family:var(--serif); font-size:21px; font-weight:600; color:var(--acc); letter-spacing:1px;}
+.pg-wk{font-family:var(--serif); font-size:11px; font-style:italic; color:var(--ink3); margin-top:4px;}
+.pg-wk b{color:var(--gold); font-style:normal;}
+.pg-num{font-family:var(--serif); font-size:11px; font-style:italic; color:var(--ink3); margin-top:4px;}
+
+/* min-height:0 is required or a long day overflows and cannot be scrolled */
+.pg-scroll{flex:1 1 auto; min-height:0; overflow-y:auto; padding:20px 38px 30px; position:relative;}
+.pg-scroll.right-side{padding-left:46px;}
+.pg-scroll.left-side{padding-right:46px;}
+.pg-scroll::before{content:'';position:absolute;left:26px;top:0;bottom:0;width:1px;background:rgba(150,60,30,.09);pointer-events:none;}
+.pg-scroll.right-side::before{left:34px;}
+
+.pg-empty{display:flex;flex-direction:column;align-items:center;justify-content:center;height:100%;color:var(--ink3);}
+.pg-empty-em{font-size:40px;margin-bottom:14px;opacity:.5;}
+.pg-empty-t{font-family:var(--serif);font-size:18px;font-style:italic;}
+
+/* section */
+.sec{margin-bottom:24px;}
+.sec-top{display:flex;align-items:baseline;gap:9px;margin-bottom:4px;}
+.sec-no{font-family:var(--serif);font-size:11px;font-style:italic;color:var(--gold);min-width:16px;}
+.sec-name{font-family:var(--serif);font-size:15.5px;font-weight:700;color:var(--acc);letter-spacing:.5px;flex:1;}
+.sec-icon{font-size:15px;}
+.sec-line{height:2px;margin:0 0 10px;background:linear-gradient(90deg,var(--acc) 0 34px,var(--rule) 34px);opacity:.85;}
+.bul{display:flex;align-items:flex-start;gap:11px;padding:4px 0;}
+.bul-mark{flex:0 0 auto;margin-top:9px;width:5px;height:5px;transform:rotate(45deg);background:var(--gold);}
+.bul-txt{flex:1;font-size:15.5px;line-height:1.72;color:var(--ink);white-space:pre-wrap;}
+.sec-text{font-size:15.5px;color:var(--ink);line-height:1.75;white-space:pre-wrap;}
+mark{background:rgba(212,164,60,.42);color:inherit;border-radius:2px;padding:0 1px;}
+
+/* pics */
+.pics{display:flex;flex-wrap:wrap;gap:9px;margin-top:11px;}
+.pic{
+  width:104px;height:104px;border-radius:3px;overflow:hidden;
+  border:3px solid #fff;cursor:zoom-in;
+  box-shadow:0 2px 8px rgba(60,40,15,.26);
+  transition:transform .15s;
+}
+.pic:hover{transform:scale(1.06) rotate(-1deg);z-index:6;}
+.pic img{width:100%;height:100%;object-fit:cover;display:block;}
+
+/* ═══ NAV ARROWS ═══ */
+.nav-arr{
+  position:absolute;top:50%;transform:translateY(-50%);
+  width:46px;height:80px;border:none;cursor:pointer;z-index:50;
+  background:rgba(0,0,0,.3);color:#E2D2B2;font-size:26px;
+  display:flex;align-items:center;justify-content:center;
+  transition:background .2s;
+}
+.nav-arr:hover{background:rgba(0,0,0,.55);}
+.nav-arr:disabled{opacity:.2;cursor:default;}
+#arrPrev{left:6px;border-radius:0 12px 12px 0;}
+#arrNext{right:6px;border-radius:12px 0 0 12px;}
+
+/* ═══ WELCOME ═══ */
+#welcome{
+  flex:1 1 auto;min-height:0;display:flex;flex-direction:column;align-items:center;justify-content:center;
+  text-align:center;padding:40px;color:#E2D2B2;overflow-y:auto;
+}
+.w-icon{font-size:58px;margin-bottom:16px;}
+.w-title{font-family:var(--serif);font-size:36px;font-weight:600;margin-bottom:12px;font-style:italic;}
+.w-desc{font-size:16px;color:#A89878;line-height:1.8;max-width:540px;margin-bottom:26px;}
+.w-load{
+  background:var(--acc);color:#fff;border:none;border-radius:12px;
+  padding:16px 36px;font-size:17px;cursor:pointer;font-family:var(--sans);
+  box-shadow:0 4px 20px rgba(117,56,27,.4);
+}
+.w-load:hover{background:#8A4320;}
+.w-hint{margin-top:20px;font-size:13px;color:#8A7A5C;line-height:1.9;max-width:520px;}
+.w-hint strong{color:#C8B088;}
+.w-err{margin-top:18px;color:#E0A090;font-size:14px;max-width:520px;line-height:1.7;}
+body.dragging #welcome,body.dragging #stage{outline:3px dashed rgba(201,180,136,.6);outline-offset:-14px;}
+
+/* ═══ SIDEBAR ═══ */
+#sidebar{
+  position:absolute;left:0;top:0;bottom:0;width:262px;
+  background:rgba(14,10,5,.86);backdrop-filter:blur(10px);
+  transform:translateX(-100%);transition:transform .28s ease;
+  z-index:100;overflow-y:auto;padding:16px;
+}
+#sidebar.open{transform:translateX(0);}
+.sb-yr{font-family:var(--serif);font-size:20px;font-weight:600;color:#E2D2B2;padding:8px 0 5px;border-bottom:1px solid rgba(255,255,255,.15);margin-bottom:8px;}
+.sb-mo{font-family:var(--serif);font-size:14px;font-style:italic;color:#C8A878;padding:8px 0 4px;}
+.sb-day{
+  padding:7px 10px;font-size:13px;color:#B8A888;cursor:pointer;border-radius:6px;
+  display:flex;justify-content:space-between;align-items:center;gap:8px;
+}
+.sb-day:hover{background:rgba(255,255,255,.09);}
+.sb-day.active{background:rgba(117,56,27,.6);color:#fff;}
+.sb-day-pics{font-size:10px;color:#907850;}
+.sb-none{color:#8A7A5C;font-size:13px;font-style:italic;padding:14px 4px;}
+
+/* ═══ MODALS ═══ */
+#lbox{position:fixed;inset:0;background:rgba(0,0,0,.93);z-index:400;display:none;align-items:center;justify-content:center;cursor:zoom-out;}
+#lbox.show{display:flex;}
+#lbox img{max-width:92vw;max-height:90vh;object-fit:contain;border-radius:4px;border:8px solid #fff;box-shadow:0 20px 60px rgba(0,0,0,.7);}
+#toast{position:fixed;left:50%;top:16px;transform:translateX(-50%);background:var(--ok);color:#fff;padding:10px 22px;border-radius:20px;font-size:14px;z-index:600;opacity:0;pointer-events:none;transition:opacity .25s;max-width:80vw;text-align:center;}
+#toast.show{opacity:1;}
+#toast.err{background:var(--bad);}
+
+#fileInp{display:none;}
+.loaded-tags{font-size:11px;color:#8A7A5C;max-width:280px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+.loaded-tag{display:inline-block;background:rgba(255,255,255,.08);border-radius:4px;padding:2px 7px;margin-left:4px;}
+
+::-webkit-scrollbar{width:9px;height:9px;}
+::-webkit-scrollbar-thumb{background:rgba(120,100,70,.45);border-radius:5px;}
+::-webkit-scrollbar-thumb:hover{background:rgba(150,125,88,.6);}
+::-webkit-scrollbar-track{background:transparent;}
+
+/* ═══ PRINT / PDF ═══ */
+#printDoc{display:none;}
+@media print{
+  html,body{height:auto;overflow:visible;background:#fff;}
+  #app,#toast,#lbox{display:none !important;}
+  #printDoc{display:block;background:#fff;color:#000;}
+  @page{margin:16mm 14mm;}
+  .p-day{page-break-after:always;break-after:page;}
+  .p-day:last-child{page-break-after:auto;break-after:auto;}
+  .p-hdr{border-bottom:1.5px solid #999;padding-bottom:8px;margin-bottom:14px;display:flex;justify-content:space-between;align-items:flex-end;}
+  .p-dow{font-family:var(--serif);font-size:9pt;letter-spacing:3px;text-transform:uppercase;color:#7A3A1B;}
+  .p-date{font-family:var(--serif);font-size:20pt;font-weight:600;}
+  .p-meta{font-family:var(--serif);font-size:10pt;font-style:italic;color:#555;text-align:right;}
+  .p-sec{margin-bottom:12pt;page-break-inside:avoid;break-inside:avoid;}
+  .p-sname{font-family:var(--serif);font-size:11.5pt;font-weight:700;color:#7A3A1B;border-bottom:.5pt solid #bbb;padding-bottom:3pt;margin-bottom:5pt;}
+  .p-bul{font-size:10.5pt;line-height:1.55;margin:0 0 3pt 14pt;text-indent:-14pt;white-space:pre-wrap;}
+  .p-bul::before{content:'◆  ';color:#A97E3F;}
+  .p-pics{display:flex;flex-wrap:wrap;gap:5pt;margin-top:6pt;}
+  .p-pics img{width:34mm;height:34mm;object-fit:cover;border:1pt solid #fff;box-shadow:0 0 2pt rgba(0,0,0,.3);}
+}
+</style>
+</head>
+<body>
+<div id="toast"></div>
+<div id="lbox"><img id="lboxImg" alt=""></div>
+<input type="file" id="fileInp" accept=".json,application/json" multiple>
+
+<div id="app">
+  <div id="topbar">
+    <span class="tb-title">📖 My Diary</span>
+    <div class="tb-right">
+      <input id="search" type="search" placeholder="Search all entries…" autocomplete="off">
+      <span id="searchInfo"></span>
+      <span class="tb-stats" id="tbStats"></span>
+      <span class="loaded-tags" id="loadedTags"></span>
+      <button class="tb-btn" id="btnCal">🗂 Calendar</button>
+      <button class="tb-btn" id="btnPrint">🖨 Print / PDF</button>
+      <button class="tb-btn" id="btnLoad">📂 Load files</button>
+    </div>
+  </div>
+
+  <!-- welcome -->
+  <div id="welcome">
+    <div class="w-icon">📖</div>
+    <div class="w-title">Your Diary, as a Book</div>
+    <div class="w-desc">Load the JSON files exported from your iPhone diary. Every export merges into one continuous book — flip through your days like turning real pages.</div>
+    <button class="w-load" id="wLoad">📂 Load Diary Files</button>
+    <div class="w-hint">
+      On iPhone: <strong>Export</strong> → AirDrop or share the <strong>.json</strong> to this laptop → keep every export in one <strong>Diary Backups</strong> folder → select them all here (Ctrl+A / Cmd+A).<br>
+      You can also just <strong>drag the files onto this window</strong>. Once loaded, the book is remembered — it reopens automatically next time.
+    </div>
+    <div class="w-err" id="wErr"></div>
+  </div>
+
+  <!-- book -->
+  <div id="stage" style="display:none">
+    <button class="nav-arr" id="arrPrev" aria-label="Previous">‹</button>
+    <div id="book">
+      <div class="bpage left">
+        <div class="pg-hdr left-side" id="hdrL"></div>
+        <div class="pg-scroll left-side" id="bodyL"></div>
+      </div>
+      <div class="bpage right">
+        <div class="pg-hdr right-side" id="hdrR"></div>
+        <div class="pg-scroll right-side" id="bodyR"></div>
+      </div>
+    </div>
+    <button class="nav-arr" id="arrNext" aria-label="Next">›</button>
+    <div id="sidebar"></div>
+  </div>
+</div>
+
+<div id="printDoc"></div>
+
+<script>
+'use strict';
+
+const MON=['January','February','March','April','May','June','July','August','September','October','November','December'];
+const ROMAN=['i','ii','iii','iv','v','vi','vii','viii','ix','x','xi','xii','xiii','xiv','xv'];
+const DEF_SECTIONS=[
+  {id:'exercise',icon:'🏃',name:'Daily Exercise'},
+  {id:'news',icon:'🌍',name:'Important Global News'},
+  {id:'business',icon:'💼',name:'Business Affairs'},
+  {id:'personal',icon:'🏠',name:'Personal Affairs'},
+  {id:'idea',icon:'💡',name:'Important Idea of the Day'},
+  {id:'gratitude',icon:'🙏',name:'Gratitude'},
+  {id:'spiritual',icon:'🕉',name:'Spiritual Journey'},
+];
+
+let DB={entries:{},sections:DEF_SECTIONS.slice(),files:[]};
+let dates=[];      // ascending — book order
+let spread=0;      // index of the left-hand page
+let flipping=false;
+let query='', matches=[];
+
+function parseKey(s){const [y,m,d]=String(s).split('-').map(Number);return new Date(y,(m||1)-1,d||1,12,0,0);}
+function weekNum(dateStr){
+  const d=parseKey(dateStr);
+  const t=new Date(Date.UTC(d.getFullYear(),d.getMonth(),d.getDate()));
+  const dayNum=(t.getUTCDay()+6)%7;
+  t.setUTCDate(t.getUTCDate()-dayNum+3);
+  const firstThu=new Date(Date.UTC(t.getUTCFullYear(),0,4));
+  const fDayNum=(firstThu.getUTCDay()+6)%7;
+  firstThu.setUTCDate(firstThu.getUTCDate()-fDayNum+3);
+  return 1+Math.round((t-firstThu)/(7*864e5));
+}
+function esc(s){
+  if(s===null||s===undefined)return'';
+  return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+let _tt;
+function toast(m,t){
+  const e=document.getElementById('toast');
+  e.textContent=m; e.className='show'+(t==='err'?' err':'');
+  clearTimeout(_tt); _tt=setTimeout(()=>{e.className='';},2800);
+}
+
+/* one page per spread on narrow windows, two on wide */
+const mqSingle=window.matchMedia('(max-width: 1000px)');
+function single(){return mqSingle.matches;}
+function stride(){return single()?1:2;}
+
+/* ══════════════════════════════════════════════════════════════
+   LOCAL CACHE — so the book reopens without re-picking files.
+   IndexedDB, not localStorage: the merged diary carries base64 photos
+   and will blow past the 5 MB localStorage ceiling immediately.
+   ══════════════════════════════════════════════════════════════ */
+const CACHE_DB='diaryViewer', CACHE_VER=1;
+let cdb=null;
+function openCache(){
+  return new Promise(res=>{
+    let done=false; const fin=v=>{if(!done){done=true;res(v);}};
+    if(!('indexedDB' in window))return fin(null);
+    let req; try{req=indexedDB.open(CACHE_DB,CACHE_VER);}catch(e){return fin(null);}
+    req.onupgradeneeded=()=>{const d=req.result;if(!d.objectStoreNames.contains('kv'))d.createObjectStore('kv');};
+    req.onsuccess=()=>fin(req.result);
+    req.onerror=()=>fin(null);
+    req.onblocked=()=>fin(null);
+    setTimeout(()=>fin(null),4000);
+  });
+}
+function cacheGet(k){
+  return new Promise(res=>{
+    if(!cdb)return res(null);
+    try{const r=cdb.transaction('kv','readonly').objectStore('kv').get(k);r.onsuccess=()=>res(r.result||null);r.onerror=()=>res(null);}
+    catch(e){res(null);}
+  });
+}
+function cacheSet(k,v){
+  return new Promise(res=>{
+    if(!cdb)return res(false);
+    try{const t=cdb.transaction('kv','readwrite');t.objectStore('kv').put(v,k);t.oncomplete=()=>res(true);t.onerror=()=>res(false);t.onabort=()=>res(false);}
+    catch(e){res(false);}
+  });
+}
+
+/* ══════════════════════════════════════════════════════════════
+   LOAD + MERGE
+   Old build did Object.assign in FileReader completion order, so with
+   several exports the winner for a shared date was whichever file the
+   browser happened to finish first. Now every file is parsed, sorted
+   by exportedAt, and applied oldest → newest so the newest export of a
+   day always wins. Deterministic, and deletions made on the phone
+   are not resurrected by an older backup.
+   ══════════════════════════════════════════════════════════════ */
+async function loadFiles(fileList){
+  const files=Array.from(fileList||[]).filter(f=>/\.json$/i.test(f.name)||f.type==='application/json');
+  if(!files.length){showErr('Those are not .json files. Export from the iPhone diary first.');return;}
+
+  const parsed=[], bad=[];
+  for(const f of files){
+    try{
+      const j=JSON.parse(await f.text());
+      if(!j||typeof j!=='object'||!j.entries||typeof j.entries!=='object')throw new Error('no entries');
+      parsed.push({name:f.name,exportedAt:j.exportedAt||'',json:j});
+    }catch(err){bad.push(f.name);}
+  }
+  if(!parsed.length){
+    showErr('Could not read '+bad.map(esc).join(', ')+' — no diary entries inside.');
+    return;
+  }
+
+  parsed.sort((a,b)=>String(a.exportedAt).localeCompare(String(b.exportedAt))||a.name.localeCompare(b.name));
+
+  const secOrder=[];         // newest file's ordering wins
+  parsed.forEach(p=>{
+    Object.keys(p.json.entries).forEach(d=>{
+      const day=p.json.entries[d];
+      if(day&&typeof day==='object')DB.entries[d]=day;   // newest wins per day
+    });
+    if(Array.isArray(p.json.sections)&&p.json.sections.length)secOrder.unshift(p.json.sections);
+    if(!DB.files.includes(p.name))DB.files.push(p.name);
+  });
+
+  DB.sections=unionSections(secOrder);
+
+  if(bad.length)toast('Skipped '+bad.length+' unreadable file'+(bad.length>1?'s':''),'err');
+  build();
+  await cacheSet('db',{entries:DB.entries,sections:DB.sections,files:DB.files,savedAt:Date.now()});
+}
+
+/* Keep every section that has ever existed. Renaming or deleting a
+   section on the phone used to make all its past entries invisible here,
+   because the renderer only walks the newest section list. */
+function unionSections(lists){
+  const out=[], seen=new Set();
+  const push=s=>{if(s&&s.id&&!seen.has(s.id)){seen.add(s.id);out.push({id:s.id,icon:s.icon||'📝',name:s.name||s.id});}};
+  lists.forEach(l=>l.forEach(push));
+  DEF_SECTIONS.forEach(push);   // defaults trail behind; empty ones never render
+  // any section id present in the data but in no section list at all
+  Object.values(DB.entries).forEach(day=>{
+    Object.keys(day||{}).forEach(sid=>{
+      if(!seen.has(sid))push({id:sid,icon:'📝',name:sid});
+    });
+  });
+  return out;
+}
+
+function showErr(msg){
+  document.getElementById('wErr').innerHTML=esc(msg);
+  toast(msg,'err');
+}
+
+function build(){
+  dates=Object.keys(DB.entries).filter(d=>dayHasContent(DB.entries[d])).sort();
+
+  if(!dates.length){
+    showErr('The files loaded, but every day in them is empty.');
+    return;
+  }
+  document.getElementById('wErr').textContent='';
+  document.getElementById('welcome').style.display='none';
+  document.getElementById('stage').style.display='flex';
+
+  let pics=0;
+  dates.forEach(d=>Object.values(DB.entries[d]).forEach(v=>{if(v&&v.pics)pics+=v.pics.length;}));
+  document.getElementById('tbStats').textContent=dates.length+' day'+(dates.length===1?'':'s')+' · '+pics+' photo'+(pics===1?'':'s');
+  document.getElementById('loadedTags').innerHTML=DB.files.map(f=>'<span class="loaded-tag">'+esc(f)+'</span>').join('');
+
+  gotoIndex(dates.length-1);   // open at the most recent day
+  buildSidebar();
+}
+
+function dayHasContent(e){
+  return Object.keys(e||{}).some(k=>{
+    const v=e[k];
+    return v&&((v.bullets&&v.bullets.some(b=>b&&b.trim()))||(v.text&&String(v.text).trim())||(v.pics&&v.pics.length));
+  });
+}
+function bulletsOf(v){
+  const b=(v.bullets||[]).filter(x=>x&&String(x).trim()).map(x=>String(x).trim());
+  if(!b.length&&v.text&&String(v.text).trim())return [String(v.text).trim()];
+  return b;
+}
+
+/* ══════════════════════════════════════════════════════════════
+   RENDER
+   ══════════════════════════════════════════════════════════════ */
+function gotoIndex(i){
+  const st=stride();
+  i=Math.max(0,Math.min(i,dates.length-1));
+  spread=st===1?i:i-(i%2);
+  renderSpread();
+}
+function renderSpread(){
+  document.body.classList.toggle('single',single());
+  renderSide('L',dates[spread],spread);
+  if(stride()===2)renderSide('R',dates[spread+1],spread+1);
+  document.getElementById('arrPrev').disabled=spread<=0;
+  document.getElementById('arrNext').disabled=spread+stride()>=dates.length;
+  document.querySelectorAll('.sb-day').forEach(el=>{
+    el.classList.toggle('active',el.dataset.d===dates[spread]||(stride()===2&&el.dataset.d===dates[spread+1]));
+  });
+}
+
+function renderSide(side,date,pageIdx){
+  const hdr=document.getElementById('hdr'+side);
+  const body=document.getElementById('body'+side);
+  if(!date){
+    hdr.innerHTML='';
+    body.innerHTML='<div class="pg-empty"><div class="pg-empty-em">🍂</div><div class="pg-empty-t">Blank page</div></div>';
+    return;
+  }
+  const dt=parseKey(date);
+  hdr.innerHTML=
+    '<div>'+
+      '<div class="pg-dow">'+esc(dt.toLocaleDateString('en-IN',{weekday:'long'}).toUpperCase())+'</div>'+
+      '<div class="pg-date">'+esc(dt.toLocaleDateString('en-IN',{day:'numeric',month:'long'}))+'</div>'+
+    '</div>'+
+    '<div style="text-align:right">'+
+      '<div class="pg-yr">'+dt.getFullYear()+'</div>'+
+      '<div class="pg-wk">Week <b>'+weekNum(date)+'</b></div>'+
+      '<div class="pg-num">page '+(pageIdx+1)+' of '+dates.length+'</div>'+
+    '</div>';
+
+  const e=DB.entries[date]||{};
+  let h='';
+  DB.sections.forEach((sec,si)=>{
+    const v=e[sec.id]||{};
+    const bullets=bulletsOf(v);
+    const pics=v.pics||[];
+    if(!bullets.length&&!pics.length)return;
+    h+='<div class="sec">'+
+       '<div class="sec-top"><span class="sec-no">'+(ROMAN[si]||(si+1))+'.</span>'+
+       '<span class="sec-name">'+esc(sec.name)+'</span><span class="sec-icon">'+esc(sec.icon)+'</span></div>'+
+       '<div class="sec-line"></div>';
+    // every point is shown — there is room on a laptop page, and the
+    // page scrolls, so hiding points behind a "4 more…" modal only got
+    // in the way of reading
+    bullets.forEach(b=>{
+      h+='<div class="bul"><span class="bul-mark"></span><span class="bul-txt">'+hl(b)+'</span></div>';
+    });
+    if(pics.length){
+      h+='<div class="pics">';
+      pics.forEach((src,i)=>{
+        h+='<div class="pic" data-d="'+esc(date)+'" data-s="'+esc(sec.id)+'" data-i="'+i+'"><img src="'+esc(src)+'" alt="" loading="lazy"></div>';
+      });
+      h+='</div>';
+    }
+    h+='</div>';
+  });
+  body.innerHTML=h||'<div class="pg-empty"><div class="pg-empty-em">🖋</div><div class="pg-empty-t">Nothing written this day</div></div>';
+  body.scrollTop=0;
+  body.querySelectorAll('.pic').forEach(p=>{
+    p.addEventListener('click',()=>showPic(p.dataset.d,p.dataset.s,+p.dataset.i));
+  });
+}
+
+/* highlight the search term inside a bullet */
+function hl(text){
+  if(!query)return esc(text);
+  const q=query.toLowerCase(), lower=text.toLowerCase();
+  let out='', from=0, at;
+  while((at=lower.indexOf(q,from))!==-1){
+    out+=esc(text.slice(from,at))+'<mark>'+esc(text.slice(at,at+q.length))+'</mark>';
+    from=at+q.length;
+  }
+  return out+esc(text.slice(from));
+}
+
+/* ══════════════════════════════════════════════════════════════
+   TURN
+   ══════════════════════════════════════════════════════════════ */
+function turn(dir){
+  if(flipping)return;
+  const st=stride();
+  const next=spread+dir*st;
+  if(next<0||next>=dates.length)return;
+  flipping=true;
+  const book=document.getElementById('book');
+  book.classList.add(dir>0?'flipping-next':'flipping-prev');
+  setTimeout(()=>{spread=next;renderSpread();},200);
+  setTimeout(()=>{book.classList.remove('flipping-next','flipping-prev');flipping=false;},440);
+}
+
+/* ══════════════════════════════════════════════════════════════
+   SIDEBAR + SEARCH
+   ══════════════════════════════════════════════════════════════ */
+function buildSidebar(){
+  const list=query?matches:dates;
+  const sb=document.getElementById('sidebar');
+  if(!list.length){
+    sb.innerHTML='<div class="sb-none">No day contains “'+esc(query)+'”.</div>';
+    return;
+  }
+  const tree={};
+  [...list].reverse().forEach(d=>{
+    const dt=parseKey(d), y=dt.getFullYear(), m=dt.getMonth();
+    (tree[y]=tree[y]||{}); (tree[y][m]=tree[y][m]||[]).push(d);
+  });
+  let h='';
+  Object.keys(tree).sort((a,b)=>b-a).forEach(y=>{
+    h+='<div class="sb-yr">'+y+'</div>';
+    Object.keys(tree[y]).sort((a,b)=>b-a).forEach(m=>{
+      h+='<div class="sb-mo">'+MON[m]+'</div>';
+      tree[y][m].forEach(d=>{
+        const dt=parseKey(d);
+        let pc=0; Object.values(DB.entries[d]||{}).forEach(v=>{if(v&&v.pics)pc+=v.pics.length;});
+        h+='<div class="sb-day" data-d="'+esc(d)+'">'+
+             '<span>'+esc(dt.toLocaleDateString('en-IN',{weekday:'short',day:'numeric'}))+'</span>'+
+             (pc?'<span class="sb-day-pics">📸'+pc+'</span>':'')+
+           '</div>';
+      });
+    });
+  });
+  sb.innerHTML=h;
+  sb.querySelectorAll('.sb-day').forEach(el=>el.addEventListener('click',()=>jumpTo(el.dataset.d)));
+  renderSpread();
+}
+function jumpTo(d){
+  const i=dates.indexOf(d);
+  if(i<0)return;
+  gotoIndex(i);
+  document.getElementById('sidebar').classList.remove('open');
+}
+
+function runSearch(raw){
+  query=(raw||'').trim();
+  const info=document.getElementById('searchInfo');
+  if(!query){
+    matches=[]; info.textContent='';
+    buildSidebar();
+    return;
+  }
+  const q=query.toLowerCase();
+  matches=dates.filter(d=>{
+    const e=DB.entries[d]||{};
+    return Object.keys(e).some(sid=>bulletsOf(e[sid]||{}).some(b=>b.toLowerCase().includes(q)));
+  });
+  info.textContent=matches.length?matches.length+' day'+(matches.length===1?'':'s'):'no match';
+  buildSidebar();
+  if(matches.length)jumpTo(matches[matches.length-1]);   // newest match
+}
+
+/* ══════════════════════════════════════════════════════════════
+   PHOTO LIGHTBOX
+   ══════════════════════════════════════════════════════════════ */
+function showPic(date,sid,i){
+  const v=(DB.entries[date]||{})[sid]||{};
+  if(v.pics&&v.pics[i]){
+    document.getElementById('lboxImg').src=v.pics[i];
+    document.getElementById('lbox').classList.add('show');
+  }
+}
+
+/* ══════════════════════════════════════════════════════════════
+   PRINT — a linear copy of the whole book, one day per sheet
+   ══════════════════════════════════════════════════════════════ */
+function doPrint(){
+  if(!dates.length)return;
+  const src=query&&matches.length?matches:dates;
+  let h='';
+  src.forEach(d=>{
+    const dt=parseKey(d), e=DB.entries[d]||{};
+    let inner='';
+    DB.sections.forEach(sec=>{
+      const v=e[sec.id]||{};
+      const bullets=bulletsOf(v), pics=v.pics||[];
+      if(!bullets.length&&!pics.length)return;
+      inner+='<div class="p-sec"><div class="p-sname">'+esc(sec.icon)+' '+esc(sec.name)+'</div>';
+      bullets.forEach(b=>{inner+='<div class="p-bul">'+esc(b)+'</div>';});
+      if(pics.length){
+        inner+='<div class="p-pics">';
+        pics.forEach(p=>{inner+='<img src="'+esc(p)+'" alt="">';});
+        inner+='</div>';
+      }
+      inner+='</div>';
+    });
+    if(!inner)return;
+    h+='<div class="p-day"><div class="p-hdr">'+
+       '<div><div class="p-dow">'+esc(dt.toLocaleDateString('en-IN',{weekday:'long'}).toUpperCase())+'</div>'+
+       '<div class="p-date">'+esc(dt.toLocaleDateString('en-IN',{day:'numeric',month:'long',year:'numeric'}))+'</div></div>'+
+       '<div class="p-meta">Week '+weekNum(d)+'</div></div>'+inner+'</div>';
+  });
+  document.getElementById('printDoc').innerHTML=h;
+  setTimeout(()=>window.print(),120);   // let the images attach first
+}
+
+/* ══════════════════════════════════════════════════════════════
+   WIRING
+   ══════════════════════════════════════════════════════════════ */
+document.getElementById('btnLoad').addEventListener('click',()=>document.getElementById('fileInp').click());
+document.getElementById('wLoad').addEventListener('click',()=>document.getElementById('fileInp').click());
+document.getElementById('fileInp').addEventListener('change',ev=>{loadFiles(ev.target.files);ev.target.value='';});
+document.getElementById('btnCal').addEventListener('click',()=>document.getElementById('sidebar').classList.toggle('open'));
+document.getElementById('btnPrint').addEventListener('click',doPrint);
+document.getElementById('arrPrev').addEventListener('click',()=>turn(-1));
+document.getElementById('arrNext').addEventListener('click',()=>turn(1));
+document.getElementById('lbox').addEventListener('click',function(){this.classList.remove('show');});
+
+let sTimer=null;
+document.getElementById('search').addEventListener('input',ev=>{
+  clearTimeout(sTimer);
+  const v=ev.target.value;
+  sTimer=setTimeout(()=>runSearch(v),180);
+});
+
+document.addEventListener('keydown',e=>{
+  const typing=/^(INPUT|TEXTAREA)$/.test(document.activeElement&&document.activeElement.tagName);
+  if(e.key==='Escape'){
+    document.getElementById('lbox').classList.remove('show');
+    document.getElementById('sidebar').classList.remove('open');
+    if(typing)document.activeElement.blur();
+    return;
+  }
+  if(typing)return;
+  if(e.key==='ArrowRight'||e.key===' '||e.key==='PageDown'){e.preventDefault();turn(1);}
+  if(e.key==='ArrowLeft'||e.key==='PageUp'){e.preventDefault();turn(-1);}
+  if(e.key==='Home'&&dates.length){gotoIndex(0);}
+  if(e.key==='End'&&dates.length){gotoIndex(dates.length-1);}
+  if(e.key==='/'){e.preventDefault();document.getElementById('search').focus();}
+});
+
+mqSingle.addEventListener('change',()=>{if(dates.length)gotoIndex(spread);});
+
+/* drag & drop */
+let dragDepth=0;
+window.addEventListener('dragenter',e=>{e.preventDefault();dragDepth++;document.body.classList.add('dragging');});
+window.addEventListener('dragover',e=>{e.preventDefault();});
+window.addEventListener('dragleave',()=>{if(--dragDepth<=0){dragDepth=0;document.body.classList.remove('dragging');}});
+window.addEventListener('drop',e=>{
+  e.preventDefault(); dragDepth=0; document.body.classList.remove('dragging');
+  if(e.dataTransfer&&e.dataTransfer.files&&e.dataTransfer.files.length)loadFiles(e.dataTransfer.files);
+});
+
+/* ══════════════════════════════════════════════════════════════
+   BOOT — restore the cached book if there is one
+   ══════════════════════════════════════════════════════════════ */
+(async function(){
+  cdb=await openCache();
+  const cached=await cacheGet('db');
+  if(cached&&cached.entries&&Object.keys(cached.entries).length){
+    DB.entries=cached.entries;
+    DB.sections=(cached.sections&&cached.sections.length)?cached.sections:DEF_SECTIONS.slice();
+    DB.files=cached.files||[];
+    build();
+    if(cached.savedAt)toast('Reopened '+dates.length+' day'+(dates.length===1?'':'s')+' — load new exports any time');
+  }
+})();
+</script>
+</body>
+</html>
