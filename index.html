@@ -1083,10 +1083,11 @@ function clearCompletedTodos(){
   queueSave();
   renderTodo();
 }
-function todoAge(createdAt){
-  if(createdAt===todayStr())return'';
-  const days=Math.max(0,Math.round((parseKey(todayStr())-parseKey(createdAt))/864e5));
-  return days===1?'since yesterday':'since '+days+' days ago';
+function todoDateLabel(prefix,dateStr){
+  if(dateStr===todayStr())return prefix+' today';
+  if(dateStr===shiftKey(todayStr(),-1))return prefix+' yesterday';
+  const dt=parseKey(dateStr);
+  return prefix+' '+dt.getDate()+' '+MON[dt.getMonth()].slice(0,3);
 }
 function renderTodo(){
   const wrap=document.getElementById('todoScroll');
@@ -1144,8 +1145,8 @@ function todoRow(t){
   ta.addEventListener('input',()=>{editTodoText(t.id,ta.value); grow(ta);});
   ta.addEventListener('focus',()=>grow(ta));
   mid.appendChild(ta);
-  const age=todoAge(t.createdAt);
-  if(age && !t.done)mid.appendChild(el('div','todo-age',age));
+  const label=t.done?todoDateLabel('Done',t.doneAt||t.createdAt):todoDateLabel('Added',t.createdAt);
+  mid.appendChild(el('div','todo-age',label));
   row.appendChild(mid);
 
   const x=el('button','todo-x','✕');
