@@ -234,6 +234,42 @@ body{
 }
 .add-pic .ap-lbl{font-size:9px; color:var(--gold); letter-spacing:1px; text-transform:uppercase; font-weight:600;}
 
+/* ═══ TO-DO ═══ */
+.todo-add{display:flex; align-items:center; gap:10px; margin-bottom:18px;}
+.todo-add-inp{
+  flex:1 1 auto; min-width:0; background:var(--paper2); border:1px solid var(--rule);
+  border-radius:9px; padding:11px 14px; color:var(--ink); font-family:var(--sans);
+  font-size:15px; outline:none; -webkit-appearance:none;
+}
+.todo-add-inp::placeholder{color:var(--ink3); font-style:italic;}
+.todo-add-btn{
+  flex:0 0 auto; width:38px; height:38px; border-radius:50%; border:none;
+  background:var(--acc); color:#fff; font-size:19px; cursor:pointer; line-height:1;
+  display:flex; align-items:center; justify-content:center;
+}
+.todo-lbl-row{display:flex; align-items:baseline; justify-content:space-between; margin:20px 0 8px;}
+.todo-lbl-row:first-child{margin-top:0;}
+.todo-lbl{
+  font-family:var(--serif); font-size:11px; letter-spacing:2.5px; text-transform:uppercase;
+  color:var(--gold); font-weight:600;
+}
+.todo-clear{background:none; border:none; color:var(--acc); font-family:var(--sans); font-size:12px; font-weight:600; cursor:pointer; padding:2px 0;}
+.todo-row{display:flex; align-items:flex-start; gap:11px; padding:9px 0; border-bottom:1px solid var(--rule);}
+.todo-check{
+  flex:0 0 auto; margin-top:1px; width:22px; height:22px; border-radius:50%;
+  border:1.5px solid var(--acc); background:none; cursor:pointer;
+  display:flex; align-items:center; justify-content:center; color:#fff; font-size:12px; padding:0;
+}
+.todo-row.done .todo-check{background:var(--acc);}
+.todo-txt{
+  display:block; width:100%; background:transparent; border:none; outline:none;
+  font-family:var(--sans); font-size:15.5px; color:var(--ink); line-height:1.5;
+  padding-top:2px; resize:none; overflow:hidden; -webkit-appearance:none; appearance:none;
+}
+.todo-row.done .todo-txt{color:var(--ink3); text-decoration:line-through;}
+.todo-x{flex:0 0 auto; background:none; border:none; color:var(--ink3); opacity:.4; font-size:15px; cursor:pointer; padding:2px 2px; margin-top:2px;}
+.todo-age{font-size:10.5px; color:var(--ink3); margin-top:3px;}
+
 /* ═══ BOTTOM BAR ═══ */
 #bottomBar{
   flex:0 0 auto; background:var(--desk);
@@ -241,7 +277,7 @@ body{
   display:flex; justify-content:space-around; align-items:center;
   padding-top:7px; padding-bottom:calc(var(--safeB) + 7px);
 }
-.bb-btn{display:flex; flex-direction:column; align-items:center; gap:2px; background:none; border:none; cursor:pointer; opacity:.4; padding:2px 18px;}
+.bb-btn{display:flex; flex-direction:column; align-items:center; gap:2px; background:none; border:none; cursor:pointer; opacity:.4; padding:2px 10px;}
 .bb-btn.on{opacity:1;}
 .bb-ico{font-size:19px;}
 .bb-lbl{font-size:9px; color:#C9B488; letter-spacing:1px; text-transform:uppercase; font-family:var(--sans);}
@@ -451,6 +487,12 @@ body{
     </div>
   </div>
 
+  <!-- ══ TO-DO ══ -->
+  <div class="tab" id="tabTodo">
+    <div class="topbar"><div class="tb-row"><span class="tb-title">To-Do</span></div></div>
+    <div class="tab-scroll" id="todoScroll"></div>
+  </div>
+
   <!-- ══ ARCHIVE ══ -->
   <div class="tab" id="tabArchive">
     <div class="topbar"><div class="tb-row"><span class="tb-title">Archive</span></div></div>
@@ -465,6 +507,7 @@ body{
 
   <div id="bottomBar">
     <button class="bb-btn on" id="bbDiary"><span class="bb-ico">📖</span><span class="bb-lbl">Diary</span></button>
+    <button class="bb-btn" id="bbTodo"><span class="bb-ico">✅</span><span class="bb-lbl">To-Do</span></button>
     <button class="bb-btn" id="bbArchive"><span class="bb-ico">🗂</span><span class="bb-lbl">Archive</span></button>
     <button class="bb-btn" id="bbSettings"><span class="bb-ico">⚙️</span><span class="bb-lbl">Manage</span></button>
   </div>
@@ -493,6 +536,8 @@ const IMG_MAX_DIM=1400, IMG_QUALITY=.72;
 const S={
   secs:DEF_SECTIONS,
   entries:{},
+  todos:[],            // {id, text, done, createdAt, doneAt} — persists until checked off,
+                        // no per-day snapshot, so "carries over" is just the natural default
   date:todayStr(),
   picTgt:null,
   flipping:false,
@@ -607,6 +652,7 @@ function lsWriteAll(){
   try{
     localStorage.setItem('d2_secs',JSON.stringify(S.secs));
     localStorage.setItem('d2_ent',JSON.stringify(S.entries));
+    localStorage.setItem('d2_todos',JSON.stringify(S.todos));
     return true;
   }catch(e){return false;}
 }
@@ -630,6 +676,7 @@ async function flushSave(){
       }
       await idbSet('meta','secs',S.secs);
       await idbSet('meta','lastExp',S.lastExp);
+      await idbSet('meta','todos',S.todos);
     }catch(err){
       toast('Could not save — free up space','err');
       console.error(err);
@@ -678,6 +725,7 @@ async function boot(){
     stage('reading settings');
     S.secs=await limit(idbGet('meta','secs'),4000,null);
     S.lastExp=(await limit(idbGet('meta','lastExp'),4000,null))||null;
+    S.todos=(await limit(idbGet('meta','todos'),4000,null))||[];
     if(!S.secs||!S.secs.length){
       stage('first run');
       // one-time migration from the old localStorage build
@@ -698,6 +746,7 @@ async function boot(){
     stage('reading entries');
     S.secs=lsRead('d2_secs')||DEF_SECTIONS.slice();
     S.entries=lsRead('d2_ent')||{};
+    S.todos=lsRead('d2_todos')||[];
     try{S.lastExp=localStorage.getItem('d2_lexp')||null;}catch(e){}
   }else{
     S.secs=DEF_SECTIONS.slice();
@@ -997,6 +1046,116 @@ function goToday(){
 }
 
 /* ══════════════════════════════════════════════════════════════
+   TO-DO — a single running list, not per-day. An item just sits there,
+   visible every time you open the tab, until you check it off — so
+   "carrying over" needs no special logic, it's the natural default.
+   ══════════════════════════════════════════════════════════════ */
+function addTodo(text){
+  const t=(text||'').trim();
+  if(!t)return;
+  S.todos.unshift({id:'t'+Date.now().toString(36)+Math.random().toString(36).slice(2,6),
+    text:t, done:false, createdAt:todayStr(), doneAt:null});
+  queueSave();
+  renderTodo();
+}
+function toggleTodo(id){
+  const t=S.todos.find(x=>x.id===id);
+  if(!t)return;
+  t.done=!t.done;
+  t.doneAt=t.done?todayStr():null;
+  queueSave();
+  renderTodo();
+}
+function delTodo(id){
+  const i=S.todos.findIndex(x=>x.id===id);
+  if(i>=0)S.todos.splice(i,1);
+  queueSave();
+  renderTodo();
+}
+function editTodoText(id,text){
+  const t=S.todos.find(x=>x.id===id);
+  if(t){t.text=text; queueSave();}
+}
+function clearCompletedTodos(){
+  if(!S.todos.some(t=>t.done))return;
+  if(!confirm('Remove all completed to-dos? This can\'t be undone.'))return;
+  S.todos=S.todos.filter(t=>!t.done);
+  queueSave();
+  renderTodo();
+}
+function todoAge(createdAt){
+  if(createdAt===todayStr())return'';
+  const days=Math.max(0,Math.round((parseKey(todayStr())-parseKey(createdAt))/864e5));
+  return days===1?'since yesterday':'since '+days+' days ago';
+}
+function renderTodo(){
+  const wrap=document.getElementById('todoScroll');
+  wrap.innerHTML='';
+
+  const addRow=el('div','todo-add');
+  const inp=document.createElement('input');
+  inp.className='todo-add-inp'; inp.type='text'; inp.placeholder='Add a to-do…';
+  inp.setAttribute('enterkeyhint','done');
+  const commit=()=>{ if(inp.value.trim()){addTodo(inp.value); inp.value=''; inp.focus();} };
+  inp.addEventListener('keydown',ev=>{ if(ev.key==='Enter'){ev.preventDefault(); commit();} });
+  const addBtn=el('button','todo-add-btn','＋');
+  addBtn.addEventListener('click',commit);
+  addRow.appendChild(inp); addRow.appendChild(addBtn);
+  wrap.appendChild(addRow);
+
+  const active=S.todos.filter(t=>!t.done);
+  const done=S.todos.filter(t=>t.done);
+
+  if(!S.todos.length){
+    const em=el('div','empty');
+    em.appendChild(el('div','empty-em','✅'));
+    em.appendChild(el('div','empty-t','Nothing on your list'));
+    em.appendChild(el('p',null,'Add something above — it stays until you check it off.'));
+    wrap.appendChild(em);
+    return;
+  }
+
+  if(active.length){
+    const lr=el('div','todo-lbl-row');
+    lr.appendChild(el('span','todo-lbl','To do · '+active.length));
+    wrap.appendChild(lr);
+    active.forEach(t=>wrap.appendChild(todoRow(t)));
+  }
+  if(done.length){
+    const lr=el('div','todo-lbl-row');
+    lr.appendChild(el('span','todo-lbl','Done · '+done.length));
+    const cl=el('button','todo-clear','Clear completed');
+    cl.addEventListener('click',clearCompletedTodos);
+    lr.appendChild(cl);
+    wrap.appendChild(lr);
+    done.forEach(t=>wrap.appendChild(todoRow(t)));
+  }
+}
+function todoRow(t){
+  const row=el('div','todo-row'+(t.done?' done':''));
+  const chk=el('button','todo-check',t.done?'✓':'');
+  chk.addEventListener('click',()=>toggleTodo(t.id));
+  row.appendChild(chk);
+
+  const mid=el('div',null);
+  mid.style.flex='1 1 auto'; mid.style.minWidth='0';
+  const ta=document.createElement('textarea');
+  ta.className='todo-txt'; ta.rows=1; ta.value=t.text;
+  ta.addEventListener('input',()=>{editTodoText(t.id,ta.value); grow(ta);});
+  ta.addEventListener('focus',()=>grow(ta));
+  mid.appendChild(ta);
+  const age=todoAge(t.createdAt);
+  if(age && !t.done)mid.appendChild(el('div','todo-age',age));
+  row.appendChild(mid);
+
+  const x=el('button','todo-x','✕');
+  x.addEventListener('click',()=>delTodo(t.id));
+  row.appendChild(x);
+  setTimeout(()=>grow(ta),0);
+  return row;
+}
+
+/* ══════════════════════════════════════════════════════════════
    ARCHIVE
    ══════════════════════════════════════════════════════════════ */
 function renderArchive(){
@@ -1258,11 +1417,12 @@ function snooze(){
    TABS + WIRING
    ══════════════════════════════════════════════════════════════ */
 function goTab(t){
-  ['Diary','Archive','Settings'].forEach(x=>{
+  ['Diary','Todo','Archive','Settings'].forEach(x=>{
     document.getElementById('tab'+x).classList.toggle('on',x===t);
     document.getElementById('bb'+x).classList.toggle('on',x===t);
   });
   if(t==='Diary')renderPage();
+  else if(t==='Todo')renderTodo();
   else if(t==='Archive')renderArchive();
   else renderSettings();
 }
@@ -1274,6 +1434,7 @@ function wire(){
   document.getElementById('dnNext').addEventListener('click',()=>flip(1));
   document.getElementById('dnMid').addEventListener('click',goToday);
   document.getElementById('bbDiary').addEventListener('click',()=>goTab('Diary'));
+  document.getElementById('bbTodo').addEventListener('click',()=>goTab('Todo'));
   document.getElementById('bbArchive').addEventListener('click',()=>goTab('Archive'));
   document.getElementById('bbSettings').addEventListener('click',()=>goTab('Settings'));
   document.getElementById('filePick').addEventListener('change',onPics);
