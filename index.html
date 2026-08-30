@@ -270,6 +270,21 @@ body{
 .todo-x{flex:0 0 auto; background:none; border:none; color:var(--ink3); opacity:.4; font-size:15px; cursor:pointer; padding:2px 2px; margin-top:2px;}
 .todo-age{font-size:10.5px; color:var(--ink3); margin-top:3px;}
 
+/* ═══ AGENDA (hour-by-hour plan, bottom of the page) ═══ */
+.agenda{margin:26px 0 4px; padding-top:16px; border-top:1px dashed var(--rule);}
+.ag-hd{font-family:var(--serif); font-size:11px; letter-spacing:2.5px; text-transform:uppercase; color:var(--gold); font-weight:600; margin-bottom:4px;}
+.ag-sub{font-size:12px; color:var(--ink3); font-style:italic; margin-bottom:12px;}
+.ag-row{display:flex; align-items:flex-start; gap:10px; padding:6px 0; border-bottom:1px solid var(--rule);}
+.ag-row:last-child{border-bottom:none;}
+.ag-hr{flex:0 0 auto; width:38px; padding-top:6px; font-family:var(--sans); font-size:11px; color:var(--ink3); font-variant-numeric:tabular-nums;}
+.ag-plan{
+  flex:1 1 auto; min-width:0; background:transparent; border:none; outline:none; resize:none; overflow:hidden;
+  font-family:var(--sans); font-size:15px; color:var(--ink); line-height:1.5;
+  padding:5px 0; border-bottom:1px solid transparent;
+}
+.ag-plan:focus{border-bottom-color:var(--rule);}
+.ag-plan::placeholder{color:var(--ink3); font-style:italic; opacity:.7;}
+
 /* ═══ BOTTOM BAR ═══ */
 #bottomBar{
   flex:0 0 auto; background:var(--desk);
@@ -562,12 +577,16 @@ function srcOf(p){return typeof p==='string'?p:((p&&p.src)||'');}
      merge — deletion is local-only and never propagates through a sync,
      the same way scratching a line out of one notebook doesn't erase it
      from a photocopy sitting elsewhere. */
+const META_KEYS=['fmt','hourly'];   // day-level fields that are not sections
 function mergeDay(local,incoming){
   if(!local)return incoming;
   if(!incoming)return local;
   const lf=local.fmt||1, iff=incoming.fmt||1;
-  const sids=new Set(Object.keys(local).concat(Object.keys(incoming)).filter(k=>k!=='fmt'));
+  const sids=new Set(Object.keys(local).concat(Object.keys(incoming)).filter(k=>!META_KEYS.includes(k)));
   const out={fmt:lf};   // the day's fmt is whichever it already was locally — frozen
+  // hourly plans merge by hour-key, independent of fmt entirely — local's
+  // own notes always win, incoming only fills hours local has nothing for
+  if(local.hourly||incoming.hourly)out.hourly=Object.assign({},incoming.hourly||{},local.hourly||{});
   if(lf<2||iff<2){
     // at least one side is legacy plain text. The output's shape follows lf
     // (the local day's own fmt, itself frozen) — if local is already fmt 2,
@@ -770,8 +789,12 @@ document.addEventListener('visibilitychange',()=>{if(document.visibilityState===
 window.addEventListener('pagehide',()=>{if(saveTimer)flushSave();});
 
 function hasContent(e){
+  // an hour-plan-only day (no diary bullets at all) still counts — otherwise
+  // flushSave below reads "no content" and deletes the day it was just typed into
+  const h=(e||{}).hourly;
+  if(h&&Object.keys(h).some(hh=>h[hh]&&String(h[hh]).trim()))return true;
   return Object.keys(e||{}).some(k=>{
-    if(k==='fmt')return false;
+    if(META_KEYS.includes(k))return false;
     const v=e[k];
     return v && ((v.bullets&&v.bullets.some(b=>textOf(b).trim())) || (v.pics&&v.pics.length));
   });
@@ -893,7 +916,8 @@ function renderPage(){
   const body=document.getElementById('pgBody');
   body.innerHTML='';
   S.secs.forEach((sec,i)=>body.appendChild(buildSec(sec,i)));
-  body.querySelectorAll('textarea.bullet-inp').forEach(grow);
+  body.appendChild(buildAgenda(S.date));
+  body.querySelectorAll('textarea.bullet-inp,textarea.ag-plan').forEach(grow);
 }
 
 function buildSec(sec,idx){
@@ -1002,6 +1026,47 @@ function refreshSec(sid){
   const fresh=buildSec(S.secs[idx],idx);
   old.replaceWith(fresh);
   fresh.querySelectorAll('textarea.bullet-inp').forEach(grow);
+}
+
+/* ══════════════════════════════════════════════════════════════
+   AGENDA — hour-by-hour plan, at the bottom of the page. Entry only
+   here: comparing it against StayFree's actual desktop activity only
+   makes sense on the laptop, since that's the only device that ever
+   sees StayFree data. What's typed here just travels there on the next
+   export, same as everything else.
+   ══════════════════════════════════════════════════════════════ */
+const AGENDA_START=6, AGENDA_END=22;   // 6am through the 10-11pm hour
+function setHourly(date,hour,text){
+  if(!S.entries[date])S.entries[date]={fmt:CUR_FMT};
+  const day=S.entries[date];
+  if(!day.hourly)day.hourly={};
+  if(text&&text.trim())day.hourly[hour]=text; else delete day.hourly[hour];
+  queueSave(date);
+}
+function buildAgenda(date){
+  const day=S.entries[date]||{};
+  const hourly=day.hourly||{};
+  const wrap=el('div','agenda');
+  wrap.appendChild(el('div','ag-hd','Hour by hour'));
+  wrap.appendChild(el('div','ag-sub','Compared against your desktop time in the laptop viewer'));
+  for(let h=AGENDA_START;h<=AGENDA_END;h++){
+    const row=el('div','ag-row');
+    row.appendChild(el('span','ag-hr',fmtHour12(h)));
+    const ta=document.createElement('textarea');
+    ta.className='ag-plan'; ta.rows=1;
+    ta.value=hourly[h]||'';
+    ta.placeholder='Plan for this hour…';
+    ta.addEventListener('input',()=>{grow(ta);setHourly(date,h,ta.value);});
+    ta.addEventListener('focus',()=>grow(ta));
+    row.appendChild(ta);
+    wrap.appendChild(row);
+  }
+  return wrap;
+}
+function fmtHour12(h){
+  const ap=h<12?'am':'pm';
+  let hh=h%12; if(hh===0)hh=12;
+  return hh+ap;
 }
 
 /* ══════════════════════════════════════════════════════════════
