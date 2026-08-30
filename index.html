@@ -533,6 +533,82 @@ const DEF_SECTIONS=[
    180-350 KB at these settings, which is what makes a photo diary viable at all. */
 const IMG_MAX_DIM=1400, IMG_QUALITY=.72;
 
+/* ══════════════════════════════════════════════════════════════
+   ENTRY FORMAT — a day's fmt is stamped once, the moment it first gets
+   content, and never changes after. fmt 1 (absent, everything written
+   before this shipped) is plain-string bullets/pics: no per-point ID,
+   so it can only ever be merged as a whole day. fmt 2 gives every point
+   and photo a permanent ID + timestamp, which is what makes real
+   point-level merging (add one here, edit one there) possible — that's
+   the whole reason this version exists. A day never moves from one fmt
+   to the other; that is the "old stays exactly as it was" guarantee.
+   ══════════════════════════════════════════════════════════════ */
+const CUR_FMT=2;
+function newId(p){return p+Date.now().toString(36)+Math.random().toString(36).slice(2,7);}
+function dayFmt(d){return (S.entries[d]&&S.entries[d].fmt)||1;}
+function textOf(b){return typeof b==='string'?b:((b&&b.text)||'');}
+function srcOf(p){return typeof p==='string'?p:((p&&p.src)||'');}
+
+/* Merges two versions of one day into one, never dropping content that
+   exists on either side. Two regimes:
+   - either side is fmt 1 → union by exact text/src match, same safe
+     behaviour this app always had. A legacy day can never be upgraded
+     into fmt 2 by a merge; it only ever gains more plain strings.
+   - both sides fmt 2 → real per-point union by id. A point only one
+     side has is kept outright — that's what "never deletes" actually
+     means here, not just a hope. A point both sides have takes whichever
+     copy was edited more recently. A point deleted on one device but
+     still present in an older file from the other is NOT removed by a
+     merge — deletion is local-only and never propagates through a sync,
+     the same way scratching a line out of one notebook doesn't erase it
+     from a photocopy sitting elsewhere. */
+function mergeDay(local,incoming){
+  if(!local)return incoming;
+  if(!incoming)return local;
+  const lf=local.fmt||1, iff=incoming.fmt||1;
+  const sids=new Set(Object.keys(local).concat(Object.keys(incoming)).filter(k=>k!=='fmt'));
+  const out={fmt:lf};   // the day's fmt is whichever it already was locally — frozen
+  if(lf<2||iff<2){
+    // at least one side is legacy plain text. The output's shape follows lf
+    // (the local day's own fmt, itself frozen) — if local is already fmt 2,
+    // new text arriving from a legacy side is wrapped into a proper point
+    // rather than left as a bare string, so the array is never internally
+    // mixed in a way the edit handler (which does arr[idx].text=... for
+    // fmt 2) can't cope with.
+    sids.forEach(sid=>{
+      const lv=local[sid]||{bullets:[],pics:[]}, iv=incoming[sid]||{bullets:[],pics:[]};
+      const bullets=(lv.bullets||[]).slice();
+      (iv.bullets||[]).forEach(b=>{
+        const t=textOf(b);
+        if(!t||!t.trim()||bullets.some(x=>textOf(x)===t))return;
+        bullets.push(lf>=2?{id:newId('b'),text:t,createdAt:Date.now(),updatedAt:Date.now()}:t);
+      });
+      const pics=(lv.pics||[]).slice();
+      (iv.pics||[]).forEach(p=>{
+        const s=srcOf(p);
+        if(!s||pics.some(x=>srcOf(x)===s))return;
+        pics.push(lf>=2?{id:newId('p'),src:s,createdAt:Date.now()}:s);
+      });
+      out[sid]={bullets,pics};
+    });
+    return out;
+  }
+  sids.forEach(sid=>{
+    const lv=local[sid]||{bullets:[],pics:[]}, iv=incoming[sid]||{bullets:[],pics:[]};
+    const bMap=new Map();
+    (lv.bullets||[]).forEach(b=>bMap.set(b.id,b));
+    (iv.bullets||[]).forEach(b=>{const ex=bMap.get(b.id);if(!ex||(b.updatedAt||0)>(ex.updatedAt||0))bMap.set(b.id,b);});
+    const pMap=new Map();
+    (lv.pics||[]).forEach(p=>pMap.set(p.id,p));
+    (iv.pics||[]).forEach(p=>{if(!pMap.has(p.id))pMap.set(p.id,p);});
+    out[sid]={
+      bullets:[...bMap.values()].sort((a,b)=>(a.createdAt||0)-(b.createdAt||0)),
+      pics:[...pMap.values()].sort((a,b)=>(a.createdAt||0)-(b.createdAt||0)),
+    };
+  });
+  return out;
+}
+
 const S={
   secs:DEF_SECTIONS,
   entries:{},
@@ -695,8 +771,9 @@ window.addEventListener('pagehide',()=>{if(saveTimer)flushSave();});
 
 function hasContent(e){
   return Object.keys(e||{}).some(k=>{
+    if(k==='fmt')return false;
     const v=e[k];
-    return v && ((v.bullets&&v.bullets.some(b=>b&&b.trim())) || (v.pics&&v.pics.length));
+    return v && ((v.bullets&&v.bullets.some(b=>textOf(b).trim())) || (v.pics&&v.pics.length));
   });
 }
 
@@ -788,7 +865,7 @@ window.addEventListener('resize',fitViewport);
    ══════════════════════════════════════════════════════════════ */
 function gE(d,sid){return (S.entries[d]||{})[sid];}
 function ensure(d,sid){
-  if(!S.entries[d])S.entries[d]={};
+  if(!S.entries[d])S.entries[d]={fmt:CUR_FMT};   // a brand-new day gets today's format, for life
   const e=S.entries[d];
   if(!e[sid])e[sid]={bullets:[],pics:[]};
   if(!Array.isArray(e[sid].bullets))e[sid].bullets=[];
@@ -822,6 +899,7 @@ function renderPage(){
 function buildSec(sec,idx){
   const e=gE(S.date,sec.id)||{bullets:[],pics:[]};
   const bullets=e.bullets||[], pics=e.pics||[];
+  const fmt=dayFmt(S.date);
 
   const wrap=el('div','sec');
   wrap.dataset.sid=sec.id;
@@ -829,7 +907,7 @@ function buildSec(sec,idx){
   const hd=el('div','sec-hd');
   hd.appendChild(el('span','sec-no',(ROMAN[idx]||(idx+1))+'.'));
   hd.appendChild(el('span','sec-name',sec.name));
-  const filled=bullets.filter(b=>b&&b.trim()).length;
+  const filled=bullets.filter(b=>textOf(b).trim()).length;
   if(filled||pics.length){
     hd.appendChild(el('span','sec-count',[filled?filled+'':'',pics.length?'📸'+pics.length:''].filter(Boolean).join(' · ')));
   }
@@ -840,7 +918,7 @@ function buildSec(sec,idx){
   // all bullets are shown — the page scrolls, so there is no reason to hide
   // them behind a "3 more…" sheet while you are trying to write
   const list=el('div','bullets');
-  bullets.forEach((b,i)=>list.appendChild(bulletRow(sec.id,b,i)));
+  bullets.forEach((b,i)=>list.appendChild(bulletRow(sec.id,b,i,fmt)));
   wrap.appendChild(list);
 
   const add=el('button','add-bullet');
@@ -850,10 +928,10 @@ function buildSec(sec,idx){
   wrap.appendChild(add);
 
   const row=el('div','pics-row');
-  pics.forEach((src,i)=>{
+  pics.forEach((pic,i)=>{
     const p=el('div','pic');
     const img=document.createElement('img');
-    img.src=src; img.alt='';
+    img.src=srcOf(pic); img.alt='';
     img.addEventListener('click',()=>showPic(sec.id,i));
     const x=el('button','pic-x','✕');
     x.addEventListener('click',ev=>{ev.stopPropagation();delPic(sec.id,i);});
@@ -870,7 +948,7 @@ function buildSec(sec,idx){
   return wrap;
 }
 
-function bulletRow(sid,text,i){
+function bulletRow(sid,b,i,fmt){
   const row=el('div','bullet');
   row.dataset.i=i;
   row.appendChild(el('span','bullet-mark'));
@@ -878,14 +956,16 @@ function bulletRow(sid,text,i){
   const ta=document.createElement('textarea');
   ta.className='bullet-inp';
   ta.rows=1;
-  ta.value=text||'';
+  ta.value=textOf(b);
   ta.placeholder='Write a point…';
   ta.setAttribute('enterkeyhint','enter');
   ta.setAttribute('autocapitalize','sentences');
   ta.setAttribute('autocorrect','on');
   ta.addEventListener('input',()=>{
     const idx=+row.dataset.i;
-    ensure(S.date,sid).bullets[idx]=ta.value;
+    const arr=ensure(S.date,sid).bullets;
+    if(fmt>=2){ arr[idx].text=ta.value; arr[idx].updatedAt=Date.now(); }
+    else { arr[idx]=ta.value; }
     grow(ta);
     queueSave(S.date);
   });
@@ -929,14 +1009,16 @@ function refreshSec(sid){
    ══════════════════════════════════════════════════════════════ */
 function addBullet(sid){
   const e=ensure(S.date,sid);
+  const fmt=dayFmt(S.date);
   const i=e.bullets.length;
-  e.bullets.push('');
+  const now=Date.now();
+  e.bullets.push(fmt>=2 ? {id:newId('b'),text:'',createdAt:now,updatedAt:now} : '');
   queueSave(S.date);
   // append in place so the keyboard never closes mid-thought
   const sec=secNode(sid);
   if(!sec){renderPage();return;}
   const list=sec.querySelector('.bullets');
-  const row=bulletRow(sid,'',i);
+  const row=bulletRow(sid,e.bullets[i],i,fmt);
   list.appendChild(row);
   const ta=row.querySelector('textarea');
   grow(ta); ta.focus();
@@ -990,12 +1072,13 @@ async function onPics(ev){
   const files=Array.from(ev.target.files||[]);
   const sid=S.picTgt;
   if(!files.length||!sid)return;
+  const fmt=dayFmt(S.date);
   toast('Adding '+files.length+' photo'+(files.length>1?'s':'')+'…');
   let ok=0,fail=0;
   for(const f of files){
     try{
       const data=await shrink(f);
-      ensure(S.date,sid).pics.push(data);
+      ensure(S.date,sid).pics.push(fmt>=2 ? {id:newId('p'),src:data,createdAt:Date.now()} : data);
       ok++;
     }catch(err){fail++;console.error('photo failed',f.name,err);}
   }
@@ -1013,7 +1096,7 @@ function delPic(sid,i){
 function showPic(sid,i){
   const e=gE(S.date,sid);
   if(e&&e.pics&&e.pics[i]){
-    document.getElementById('lboxImg').src=e.pics[i];
+    document.getElementById('lboxImg').src=srcOf(e.pics[i]);
     document.getElementById('lbox').classList.add('show');
   }
 }
@@ -1195,8 +1278,8 @@ function renderArchive(){
         let thumb=null,pc=0,first='';
         S.secs.forEach(sec=>{
           const v=e[sec.id]; if(!v)return;
-          if(v.pics&&v.pics.length){pc+=v.pics.length; if(!thumb)thumb=v.pics[0];}
-          if(!first&&v.bullets){const b=v.bullets.find(x=>x&&x.trim()); if(b)first=b.trim();}
+          if(v.pics&&v.pics.length){pc+=v.pics.length; if(!thumb)thumb=srcOf(v.pics[0]);}
+          if(!first&&v.bullets){const b=v.bullets.find(x=>textOf(x).trim()); if(b)first=textOf(b).trim();}
         });
 
         const row=el('div','arc-day');
@@ -1375,25 +1458,20 @@ async function onJson(ev){
   if(!j||typeof j!=='object'||!j.entries){ toast('No entries found in that file','err'); return; }
 
   const incoming=Object.keys(j.entries);
-  if(!confirm('Restore '+incoming.length+' day'+(incoming.length===1?'':'s')+' from "'+f.name+'"?\n\nExisting days with the same date will be merged — nothing already written is deleted.'))return;
+  if(!confirm('Merge '+incoming.length+' day'+(incoming.length===1?'':'s')+' from "'+f.name+'"?\n\nNothing already written is ever deleted by a merge — at worst a point you deleted on one device can come back if it still exists in an older file from the other.'))return;
 
   if(Array.isArray(j.sections)&&j.sections.length){
     const known=new Set(S.secs.map(s=>s.id));
     j.sections.forEach(s=>{if(s&&s.id&&!known.has(s.id)){S.secs.push(s);known.add(s.id);}});
   }
   incoming.forEach(d=>{
-    const src=j.entries[d]||{};
-    Object.keys(src).forEach(sid=>{
-      const v=src[sid]||{};
-      const tgt=ensure(d,sid);
-      (v.bullets||[]).forEach(b=>{if(b&&b.trim()&&!tgt.bullets.includes(b))tgt.bullets.push(b);});
-      if(v.text&&v.text.trim()&&!tgt.bullets.includes(v.text.trim()))tgt.bullets.push(v.text.trim());
-      (v.pics||[]).forEach(p=>{if(p&&!tgt.pics.includes(p))tgt.pics.push(p);});
-    });
+    // legacy exports (no per-day fmt at all) carried {sectionId:{bullets,pics}}
+    // directly with no fmt marker — mergeDay treats that exactly like fmt 1
+    S.entries[d]=mergeDay(S.entries[d],j.entries[d]);
     dirtyDays.add(d);
   });
   await flushSave();
-  toast('Restored ✓');
+  toast('Merged ✓');
   renderSettings();
 }
 
