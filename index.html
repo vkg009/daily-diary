@@ -582,44 +582,61 @@ function mergeDay(local,incoming){
   if(!local)return incoming;
   if(!incoming)return local;
   const lf=local.fmt||1, iff=incoming.fmt||1;
+  // the OUTPUT format is the higher of the two — merging in a newer-shaped
+  // copy should upgrade a day, never downgrade it back to plain text just
+  // because the other copy hadn't been touched since before versioning
+  // existed (e.g. an old cached copy with no fmt field at all)
+  const outFmt=Math.max(lf,iff);
   const sids=new Set(Object.keys(local).concat(Object.keys(incoming)).filter(k=>!META_KEYS.includes(k)));
-  const out={fmt:lf};   // the day's fmt is whichever it already was locally — frozen
+  const out={fmt:outFmt};
   // hourly plans merge by hour-key, independent of fmt entirely — local's
   // own notes always win, incoming only fills hours local has nothing for
   if(local.hourly||incoming.hourly)out.hourly=Object.assign({},incoming.hourly||{},local.hourly||{});
-  if(lf<2||iff<2){
-    // at least one side is legacy plain text. The output's shape follows lf
-    // (the local day's own fmt, itself frozen) — if local is already fmt 2,
-    // new text arriving from a legacy side is wrapped into a proper point
-    // rather than left as a bare string, so the array is never internally
-    // mixed in a way the edit handler (which does arr[idx].text=... for
-    // fmt 2) can't cope with.
+  if(outFmt<2){
+    // both sides are still plain-text shape — flatten merge, dedup by text
     sids.forEach(sid=>{
       const lv=local[sid]||{bullets:[],pics:[]}, iv=incoming[sid]||{bullets:[],pics:[]};
       const bullets=(lv.bullets||[]).slice();
       (iv.bullets||[]).forEach(b=>{
         const t=textOf(b);
         if(!t||!t.trim()||bullets.some(x=>textOf(x)===t))return;
-        bullets.push(lf>=2?{id:newId('b'),text:t,createdAt:Date.now(),updatedAt:Date.now()}:t);
+        bullets.push(t);
       });
       const pics=(lv.pics||[]).slice();
       (iv.pics||[]).forEach(p=>{
         const s=srcOf(p);
         if(!s||pics.some(x=>srcOf(x)===s))return;
-        pics.push(lf>=2?{id:newId('p'),src:s,createdAt:Date.now()}:s);
+        pics.push(s);
       });
       out[sid]={bullets,pics};
     });
     return out;
   }
+  // at least one side is fmt-2+: merge at ID level, upgrading any plain-text
+  // bullets/pics from a still-legacy side into proper {id,...} objects on
+  // the way in, deduping by text against what the ID side already has so an
+  // upgrade doesn't also duplicate a point that's on both sides.
+  const toObjB=b=>(b&&typeof b==='object'&&b.id)?b:{id:newId('b'),text:textOf(b),createdAt:Date.now(),updatedAt:Date.now()};
+  const toObjP=p=>(p&&typeof p==='object'&&p.id)?p:{id:newId('p'),src:srcOf(p),createdAt:Date.now()};
   sids.forEach(sid=>{
     const lv=local[sid]||{bullets:[],pics:[]}, iv=incoming[sid]||{bullets:[],pics:[]};
     const bMap=new Map();
-    (lv.bullets||[]).forEach(b=>bMap.set(b.id,b));
-    (iv.bullets||[]).forEach(b=>{const ex=bMap.get(b.id);if(!ex||(b.updatedAt||0)>(ex.updatedAt||0))bMap.set(b.id,b);});
+    (lv.bullets||[]).map(toObjB).forEach(b=>bMap.set(b.id,b));
+    (iv.bullets||[]).map(toObjB).forEach(b=>{
+      const ex=bMap.get(b.id);
+      if(ex){if((b.updatedAt||0)>(ex.updatedAt||0))bMap.set(b.id,b);return;}
+      const t=textOf(b);
+      if([...bMap.values()].some(x=>textOf(x)===t))return;
+      bMap.set(b.id,b);
+    });
     const pMap=new Map();
-    (lv.pics||[]).forEach(p=>pMap.set(p.id,p));
-    (iv.pics||[]).forEach(p=>{if(!pMap.has(p.id))pMap.set(p.id,p);});
+    (lv.pics||[]).map(toObjP).forEach(p=>pMap.set(p.id,p));
+    (iv.pics||[]).map(toObjP).forEach(p=>{
+      if(pMap.has(p.id))return;
+      const s=srcOf(p);
+      if([...pMap.values()].some(x=>srcOf(x)===s))return;
+      pMap.set(p.id,p);
+    });
     out[sid]={
       bullets:[...bMap.values()].sort((a,b)=>(a.createdAt||0)-(b.createdAt||0)),
       pics:[...pMap.values()].sort((a,b)=>(a.createdAt||0)-(b.createdAt||0)),
@@ -1202,7 +1219,7 @@ function addTodo(text){
   const t=(text||'').trim();
   if(!t)return;
   S.todos.unshift({id:'t'+Date.now().toString(36)+Math.random().toString(36).slice(2,6),
-    text:t, done:false, createdAt:todayStr(), doneAt:null});
+    text:t, done:false, createdAt:todayStr(), doneAt:null, updatedAt:Date.now()});
   queueSave();
   renderTodo();
 }
@@ -1211,6 +1228,7 @@ function toggleTodo(id){
   if(!t)return;
   t.done=!t.done;
   t.doneAt=t.done?todayStr():null;
+  t.updatedAt=Date.now();
   queueSave();
   renderTodo();
 }
@@ -1222,7 +1240,19 @@ function delTodo(id){
 }
 function editTodoText(id,text){
   const t=S.todos.find(x=>x.id===id);
-  if(t){t.text=text; queueSave();}
+  if(t){t.text=text; t.updatedAt=Date.now(); queueSave();}
+}
+/* union by id, deletions stay local-only (same philosophy as diary bullets)
+   — if a todo exists on either side it survives a merge; when both sides
+   have it, the newer edit (by updatedAt) wins for text/done state. */
+function mergeTodos(local,incoming){
+  const map=new Map();
+  (local||[]).forEach(t=>map.set(t.id,t));
+  (incoming||[]).forEach(t=>{
+    const ex=map.get(t.id);
+    if(!ex||(t.updatedAt||0)>(ex.updatedAt||0))map.set(t.id,t);
+  });
+  return [...map.values()].sort((a,b)=>(b.updatedAt||0)-(a.updatedAt||0));
 }
 function clearCompletedTodos(){
   if(!S.todos.some(t=>t.done))return;
@@ -1475,7 +1505,8 @@ function buildExport(){
     app:'my-diary', version:2,
     exportedAt:new Date().toISOString(),
     sections:S.secs,
-    entries
+    entries,
+    todos:S.todos
   },null,1);
 }
 async function doExport(){
@@ -1535,7 +1566,9 @@ async function onJson(ev){
     S.entries[d]=mergeDay(S.entries[d],j.entries[d]);
     dirtyDays.add(d);
   });
+  if(Array.isArray(j.todos)&&j.todos.length)S.todos=mergeTodos(S.todos,j.todos);
   await flushSave();
+  renderTodo();
   toast('Merged ✓');
   renderSettings();
 }
